@@ -6,7 +6,7 @@
 (() => {
   "use strict";
 
-  const STORAGE_PREFIX = "wikilens_state_v1_";
+  const STORAGE_PREFIX = "wikilens_state_v2_";
 
   // アプリケーション状態
   const state = {
