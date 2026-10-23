@@ -313,7 +313,7 @@
       el.revealedCaptionText.textContent = state.problem.image?.caption || "";
       // クリア後は出典ドロワーのネタバレ注意も不要なので開いても安全
     } else {
-      el.guessInput.placeholder = "画像から連想する単語を入力（例: 建物、歴史、自然…）";
+      el.guessInput.placeholder = "写っている物や、象徴する概念を入力（例: 時計、哲学、宇宙…）";
       el.revealedCaptionBox.classList.add("hidden");
     }
 

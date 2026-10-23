@@ -257,7 +257,7 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
         "format": "json",
         "titles": f"File:{pageimage_name}",
         "prop": "imageinfo",
-        "iiprop": "url|extmetadata",
+        "iiprop": "url|extmetadata|user",
         "iiurlwidth": 800,
     }
     img_resp = session.get(WIKI_API_URL, params=img_params, timeout=20)
@@ -280,6 +280,9 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
     )
     if len(author) > 80:
         author = author[:77] + "..."
+    # 「自身の作品」等の定型文しかない場合はアップロード者名で補う
+    if re.search(r"(投稿者自身|自身による著作物|Own work|own work)", author) or author == "Wikimedia Commons Contributor":
+        author = ii.get("user") or author
 
     license_short = strip_html(ext.get("LicenseShortName", {}).get("value", "CC BY-SA"))
     license_url = ext.get("LicenseUrl", {}).get("value", "https://creativecommons.org/licenses/by-sa/4.0/")
@@ -358,14 +361,14 @@ def compute_rankings(
     base_vocab: list[str],
     base_embeddings: np.ndarray,
     article_info: dict[str, Any],
+    visual_clues: list[str] | None = None,
     max_words: int = 20000,
 ) -> list[str]:
     """
     人間にとって直感的で納得感の高いハイブリッド類似度計算:
-    1. ターゲット概念（タイトル＋主要カテゴリ）との意味類似度 (0.45)
-    2. 記事導入部テキストとの意味類似度 (0.35)
-    3. 記事本文・内部リンクでの共起ボーナス（百科事典的関連語を上位へ引き上げる）
-    4. 単純な文字列部分一致によるノイズ語（例: 「モナ・リザ」に対する「リア」等）の抑制
+    1. ターゲット概念（タイトル＋主要カテゴリ＋視覚モチーフ）との意味類似度
+    2. 記事導入部テキストとの意味類似度
+    3. 記事本文・内部リンク・視覚モチーフ語での共起ボーナス
     """
     target = article_info["title"]
     canonical = article_info["canonical_title"]
@@ -373,13 +376,19 @@ def compute_rankings(
     body_extract = article_info["body_extract"]
     categories = article_info["categories"]
     linked_set = set(article_info["linked_words"])
+    visual_set = set(visual_clues or [])
 
-    # ベース語彙にない主要内部リンク語を追加してエンコード
+    # ベース語彙にない主要内部リンク語・視覚モチーフ語を追加してエンコード
     base_set = set(base_vocab)
-    extra_words = [
-        w for w in article_info["linked_words"]
-        if w not in base_set and w != target and w != canonical
-    ][:800]
+    candidates_extra = list(visual_clues or []) + article_info["linked_words"]
+    extra_words = []
+    seen_extra = set()
+    for w in candidates_extra:
+        if w not in base_set and w != target and w != canonical and w not in seen_extra:
+            seen_extra.add(w)
+            extra_words.append(w)
+            if len(extra_words) >= 800:
+                break
 
     all_words = list(base_vocab)
     if extra_words:
@@ -392,7 +401,8 @@ def compute_rankings(
 
     # ターゲット概念ベクトル
     title_emb = model.encode(f"query: {target}", normalize_embeddings=True, show_progress_bar=False)
-    concept_text = f"query: {target}（{canonical}） {' '.join(categories[:5])}"
+    visual_str = " ".join(visual_clues[:6]) if visual_clues else ""
+    concept_text = f"query: {target} {' '.join(categories[:5])} {visual_str}"
     concept_emb = model.encode(concept_text, normalize_embeddings=True, show_progress_bar=False)
     summary_text = f"passage: {target}。{extract[:600]}"
     summary_emb = model.encode(summary_text, normalize_embeddings=True, show_progress_bar=False)
@@ -401,31 +411,33 @@ def compute_rankings(
     sim_concept = all_embs @ concept_emb
     sim_summary = all_embs @ summary_emb
 
-    scores = 0.30 * sim_title + 0.35 * sim_concept + 0.35 * sim_summary
+    scores = 0.35 * sim_title + 0.35 * sim_concept + 0.30 * sim_summary
 
-    # 共起・内部リンクボーナスと表層文字一致ノイズの補正
+    # 共起・内部リンク・視覚モチーフボーナスと表層文字一致ノイズの補正
     for idx, w in enumerate(all_words):
         if w == target or w == canonical:
             continue
 
-        # 内部リンク語かつ本文にも登場する重要関連語は大幅ブースト
+        in_visual = w in visual_set
         in_link = w in linked_set
         in_intro = len(w) >= 2 and (w in extract)
         in_body = len(w) >= 2 and (w in body_extract)
 
+        if in_visual:
+            scores[idx] += 0.085
         if in_link and in_intro:
-            scores[idx] += 0.075
+            scores[idx] += 0.070
         elif in_link and in_body:
-            scores[idx] += 0.055
+            scores[idx] += 0.050
         elif in_intro:
-            scores[idx] += 0.045
+            scores[idx] += 0.042
         elif in_link:
-            scores[idx] += 0.035
+            scores[idx] += 0.032
         elif in_body:
-            scores[idx] += 0.022
+            scores[idx] += 0.020
 
         # カタカナ2〜3文字がターゲット文字列の一部と偶然一致しただけの表層ノイズを抑制
-        if len(w) <= 3 and w in target and not in_link and not in_intro:
+        if len(w) <= 3 and w in target and not in_link and not in_intro and not in_visual:
             scores[idx] -= 0.06
 
     sorted_indices = np.argsort(-scores)
@@ -471,6 +483,8 @@ def generate_problem(
     base_vocab: list[str],
     base_embeddings: np.ndarray,
     extra_aliases: list[str] | None = None,
+    visual_clues: list[str] | None = None,
+    custom_caption: str | None = None,
     max_words: int = 20000,
 ) -> dict[str, Any]:
     """1問分の問題データJSONと画像を生成する"""
@@ -479,9 +493,22 @@ def generate_problem(
     local_img_url = download_and_anonymize_image(info["image_meta"]["thumb_url"], problem_id)
 
     aliases = list(dict.fromkeys((extra_aliases or []) + info["redirects"]))
-    ranked_words = compute_rankings(model, base_vocab, base_embeddings, info, max_words=max_words)
+    ranked_words = compute_rankings(
+        model,
+        base_vocab,
+        base_embeddings,
+        info,
+        visual_clues=visual_clues,
+        max_words=max_words,
+    )
 
     masked_summary = create_masked_summary(info["extract"], info["title"], aliases)
+    caption = custom_caption or info["image_meta"]["caption"]
+
+    # 不適切なメタカテゴリを除外
+    clean_cats = [c for c in info["categories"] if c != "〇〇" and "行" not in c][:5]
+    if not clean_cats:
+        clean_cats = ["哲学・科学の概念"]
 
     problem_data = {
         "id": problem_id,
@@ -492,13 +519,13 @@ def generate_problem(
         "image": {
             "url": local_img_url,
             "commons_url": info["image_meta"]["commons_url"],
-            "caption": info["image_meta"]["caption"],
+            "caption": caption,
             "author": info["image_meta"]["author"],
             "license": info["image_meta"]["license"],
             "license_url": info["image_meta"]["license_url"],
         },
         "hints": {
-            "category": info["categories"][:5],
+            "category": clean_cats,
             "sections": info["sections"][:6],
             "summary_length": info["page_length"],
             "first_char": info["title"][0] if info["title"] else "",
@@ -549,7 +576,8 @@ def main() -> None:
     parser.add_argument("--date", type=str, help="問題ID (YYYY-MM-DD)")
     parser.add_argument("--title", type=str, help="Wikipedia記事タイトル")
     parser.add_argument("--aliases", type=str, default="", help="カンマ区切りの追加別名")
-    parser.add_argument("--preset", action="store_true", help="初期収録用の厳選問題セットを一括生成する")
+    parser.add_argument("--visuals", type=str, default="", help="カンマ区切りの画像モチーフ語")
+    parser.add_argument("--preset", action="store_true", help="初期収録用の抽象概念問題セット（10問）を一括生成する")
     parser.add_argument("--vocab-size", type=int, default=20000, help="収録語彙数 (デフォルト: 20000)")
     args = parser.parse_args()
 
@@ -560,25 +588,109 @@ def main() -> None:
 
     generated = []
     if args.preset:
+        # 象徴的な画像から抽象概念・事象を推理する厳選10問
         presets = [
-            ("2026-10-23", "金閣寺", ["鹿苑寺", "きんかくじ", "ろくおんじ", "金閣", "舎利殿"]),
-            ("2026-10-22", "富士山", ["ふじさん", "不二山", "芙蓉峰", "富嶽", "霊峰富士"]),
-            ("2026-10-21", "ラーメン", ["らーめん", "拉麺", "中華そば", "支那そば"]),
-            ("2026-10-20", "太陽系", ["たいようけい", "Solar System"]),
-            ("2026-10-19", "ピアノ", ["ぴあの", "洋琴", "フォルテピアノ", "グランドピアノ"]),
-            ("2026-10-18", "新幹線", ["しんかんせん", "高速鉄道"]),
-            ("2026-10-17", "モナ・リザ", ["モナリザ", "もなりざ", "ラ・ジョコンダ"]),
+            (
+                "2026-10-23",
+                "時間",
+                ["じかん", "タイム", "時の流れ"],
+                ["時計", "懐中時計", "時刻", "過去", "未来", "現在", "秒", "針", "暦", "永遠", "空間", "歴史"],
+                "懐中時計。時計は時間を計測・視覚化するための代表的な象徴である。",
+            ),
+            (
+                "2026-10-22",
+                "知識",
+                ["ちしき", "ナレッジ"],
+                ["図書館", "遺跡", "書物", "本", "学問", "学習", "知恵", "情報", "科学", "哲学", "古代ローマ", "認識"],
+                "エフェソスのケルスス図書館跡。図書館は人類の知識の集積を象徴する。",
+            ),
+            (
+                "2026-10-21",
+                "重力",
+                ["じゅうりょく", "万有引力", "引力"],
+                ["銀河", "宇宙", "天体", "惑星", "星", "軌道", "相対性理論", "質量", "物理", "地球", "ブラックホール"],
+                "重力によって相互作用し引き合う2つの銀河（ハッブル宇宙望遠鏡撮影）。",
+            ),
+            (
+                "2026-10-20",
+                "美",
+                ["び", "美しさ", "美的"],
+                ["ステンドグラス", "バラ窓", "大聖堂", "教会", "芸術", "美学", "調和", "対称性", "色彩", "光", "装飾"],
+                "パリ・ノートルダム大聖堂のバラ窓。光の調和と対称性は美の象徴とされる。",
+            ),
+            (
+                "2026-10-19",
+                "思考",
+                ["しこう", "考える", "思索"],
+                ["壁画", "絵画", "ペン", "女性", "ポンペイ", "哲学", "知性", "論理", "心", "意識", "推論", "発想"],
+                "ポンペイの壁画『紙とペンを持つ女』。「思考」や知性を象徴する古代ローマの肖像。",
+            ),
+            (
+                "2026-10-18",
+                "正義",
+                ["せいぎ", "ジャスティス"],
+                ["女神", "彫刻", "石像", "目隠し", "裁判", "裁判所", "法律", "法", "天秤", "剣", "倫理", "道徳", "公平"],
+                "ブラジル連邦最高裁判所前にある、目隠しをして剣を携えた「正義の女神」像。",
+            ),
+            (
+                "2026-10-17",
+                "生命",
+                ["せいめい", "いのち", "命"],
+                ["サンゴ礁", "サンゴ", "海", "海洋", "魚", "生物", "生態系", "進化", "自然", "細胞", "地球", "誕生"],
+                "多様な海洋生物が共生するサンゴ礁。地球上の豊かな生命の象徴。",
+            ),
+            (
+                "2026-10-16",
+                "感情",
+                ["かんじょう", "情動", "気持ち", "喜怒哀楽"],
+                ["顔", "表情", "人間", "心理", "心理学", "喜び", "怒り", "悲しみ", "恐怖", "笑い", "心", "情熱"],
+                "人間の様々な情熱・感情（喜怒哀楽）を表現した16の顔の銅版画（1821年）。",
+            ),
+            (
+                "2026-10-15",
+                "文明",
+                ["ぶんめい", "シヴィライゼーション"],
+                ["スフィンクス", "ピラミッド", "エジプト", "遺跡", "古代", "歴史", "都市", "文化", "人類", "社会", "建築"],
+                "ギザの大スフィンクスとピラミッド。古代エジプトは人類最古の文明のひとつである。",
+            ),
+            (
+                "2026-10-14",
+                "運",
+                ["うん", "幸運", "運勢", "ツキ"],
+                ["クローバー", "四つ葉", "植物", "葉", "幸福", "偶然", "確率", "運命", "縁起", "奇跡", "チャンス"],
+                "幸運の象徴とされる四つ葉のクローバー。",
+            ),
         ]
-        for pid, title, aliases in presets:
+        for pid, title, aliases, visuals, caption in presets:
             try:
-                p = generate_problem(pid, title, model, base_vocab, base_embeddings, extra_aliases=aliases, max_words=args.vocab_size)
+                p = generate_problem(
+                    pid,
+                    title,
+                    model,
+                    base_vocab,
+                    base_embeddings,
+                    extra_aliases=aliases,
+                    visual_clues=visuals,
+                    custom_caption=caption,
+                    max_words=args.vocab_size,
+                )
                 generated.append(p)
-                time.sleep(0.4)
+                time.sleep(0.3)
             except Exception as e:
                 print(f"[エラー] {pid} ({title}) の生成に失敗: {e}")
     elif args.date and args.title:
         aliases = [a.strip() for a in args.aliases.split(",") if a.strip()]
-        p = generate_problem(args.date, args.title, model, base_vocab, base_embeddings, extra_aliases=aliases, max_words=args.vocab_size)
+        visuals = [v.strip() for v in args.visuals.split(",") if v.strip()]
+        p = generate_problem(
+            args.date,
+            args.title,
+            model,
+            base_vocab,
+            base_embeddings,
+            extra_aliases=aliases,
+            visual_clues=visuals,
+            max_words=args.vocab_size,
+        )
         generated.append(p)
     else:
         parser.print_help()
