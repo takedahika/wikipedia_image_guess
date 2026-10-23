@@ -1,45 +1,55 @@
 {
   "latest": "2026-10-23",
-  "updated_at": "2026-10-23T16:11:45Z",
+  "updated_at": "2026-10-23T16:35:56Z",
   "problems": [
     {
       "id": "2026-10-23",
+      "mode": "image",
       "total_words": 20000
     },
     {
       "id": "2026-10-22",
+      "mode": "text",
       "total_words": 20000
     },
     {
       "id": "2026-10-21",
+      "mode": "image",
       "total_words": 20000
     },
     {
       "id": "2026-10-20",
+      "mode": "text",
       "total_words": 20000
     },
     {
       "id": "2026-10-19",
+      "mode": "image",
       "total_words": 20000
     },
     {
       "id": "2026-10-18",
+      "mode": "image",
       "total_words": 20000
     },
     {
       "id": "2026-10-17",
+      "mode": "text",
       "total_words": 20000
     },
     {
       "id": "2026-10-16",
+      "mode": "image",
       "total_words": 20000
     },
     {
       "id": "2026-10-15",
+      "mode": "text",
       "total_words": 20000
     },
     {
       "id": "2026-10-14",
+      "mode": "image",
       "total_words": 20000
     }
   ]

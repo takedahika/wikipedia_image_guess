@@ -1,0 +1,38 @@
+name: Daily Problem Release
+
+on:
+  schedule:
+    # 毎日 15:00 UTC = 翌日 00:00 JST
+    - cron: '0 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Run release script
+        run: |
+          python3 scripts/release_today.py
+
+      - name: Commit and push changes if any
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add data/
+            git commit -m "Auto release daily problem [$(date +'%Y-%m-%d')]"
+            git push
+          else
+            echo "No changes to release."
+          fi

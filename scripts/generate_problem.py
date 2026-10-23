@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 WikiLens バッチ問題生成スクリプト
-- MediaWiki API から記事情報・代表画像・CCライセンスメタデータ・内部リンク・リダイレクトを取得
-- Wikimedia Commons のサムネイル画像を日付ID名で保存（ファイル名からの正解ネタバレ防止）
-- intfloat/multilingual-e5-small を用いて日本語頻出語彙（約20,000語）とのハイブリッド類似度を計算
+- MediaWiki API から記事情報・代表画像（画像版）または冒頭文（文字版）を取得
+- 画像がある記事は「画像版」、ない記事（孤独・記憶・意識・愛等）は「文字版」として生成
+- intfloat/multilingual-e5-small を用いて日本語頻出語彙（約20,000語）とのセマンティック類似度を計算
 - 静的配信用の JSON データ (/data/YYYY-MM-DD.json) と一覧 (/data/manifest.json) を出力
 """
 
@@ -41,6 +41,7 @@ WIKI_API_URL = "https://ja.wikipedia.org/w/api.php"
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 IMAGES_DIR = DATA_DIR / "images"
+QUEUE_DIR = BASE_DIR / "queue"
 CACHE_DIR = Path(__file__).resolve().parent / ".cache"
 
 # 除外する一般的な機能語・ストップワード・ノイズ語
@@ -78,26 +79,20 @@ def is_valid_japanese_vocab(word: str, strict_freq: bool = False) -> bool:
         return False
     if word in STOPWORDS:
         return False
-    # 数値・英字・記号のみ、または数字や記号を含む語は除外
     if re.search(r"[0-9０-９!！?？\(\)（）\[\]「」『』【】/:：;；,、.。・\s　\"'~〜\-_＝=＋+＆&]", word):
         return False
-    # ASCII文字のみは除外
     if re.fullmatch(r"[a-zA-Z]+", word):
         return False
-    # ひらがな2文字（助詞・副詞・活用語尾が多い）は除外
     if re.fullmatch(r"[ぁ-ん]{2}", word):
         return False
-    # カタカナ2文字の断片ノイズを抑制（一般的な外来語のみ許容）
     if re.fullmatch(r"[ァ-ヴー]{2}", word):
         if get_ja_freq(word) < 1.2e-5:
             return False
-    # 動詞・形容詞の活用形や助詞結合のノイズを除外
     if re.search(
         r"(ました|ません|ている|ていた|ており|された|される|として|について|による|において|における|から|まで|だけ|など|くらい|ばかり|ながら|けれど|なかった|なければ|といった|という|といった)$",
         word,
     ):
         return False
-    # ひらがなのみの3文字以上で動詞・形容詞・助詞語尾のものを除外
     if re.fullmatch(r"[ぁ-ん]{3,}", word) and word.endswith(
         ("う", "く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る", "い", "た", "だ", "て", "で", "に", "と", "ば", "よ", "ね", "わ", "ん", "し", "り")
     ):
@@ -144,12 +139,29 @@ def strip_html(text: str) -> str:
     return cleaned
 
 
-def fetch_wikipedia_article(title: str) -> dict[str, Any]:
-    """MediaWiki API から記事テキスト、画像、ライセンス情報、カテゴリ、セクション、リンクを取得する"""
+def mask_sentence_text(sentence: str, target: str, aliases: list[str], hard_nouns: list[str] | None = None) -> str:
+    """文中のターゲット名・別名・読み仮名を伏せ字（██）に変換する"""
+    masked = sentence
+    # 正解・別名の伏せ字化
+    terms = sorted(set([target] + aliases), key=len, reverse=True)
+    for t in terms:
+        if len(t) >= 2:
+            masked = re.sub(re.escape(t), "█" * len(t), masked, flags=re.IGNORECASE)
+    # 冒頭の読み仮名カッコなどを伏せ字化
+    masked = re.sub(r"（[^）]{1,45}）", "（…）", masked, count=1)
+    # 高難度用：キー名詞を伏せる
+    if hard_nouns:
+        for hn in hard_nouns:
+            if len(hn) >= 2 and hn in masked:
+                masked = masked.replace(hn, "░" * len(hn))
+    return masked
+
+
+def fetch_wikipedia_article(title: str, force_mode: str = "auto") -> dict[str, Any]:
+    """MediaWiki API から記事テキスト、画像（あれば）、カテゴリ、セクション、リンクを取得する"""
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
 
-    # 1. 導入部テキスト・カテゴリ・リダイレクト・代表画像ファイル名・リンクを取得
     params = {
         "action": "query",
         "format": "json",
@@ -179,7 +191,7 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
     intro_extract = page.get("extract", "").strip()
     page_length = page.get("length", len(intro_extract))
 
-    # 本文全体の先頭4000文字も取得（関連語の出現判定用）
+    # 本文全体の先頭4000文字も取得
     body_params = {
         "action": "query",
         "format": "json",
@@ -196,7 +208,7 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
         if bpage and bpage.get("extract"):
             body_extract = bpage["extract"]
 
-    # カテゴリ抽出（メンテナンス用カテゴリを除外）
+    # カテゴリ抽出
     raw_cats = [c["title"].replace("Category:", "").replace("カテゴリ:", "") for c in page.get("categories", [])]
     clean_cats = []
     mask_targets = {canonical_title, normalize_word(title)}
@@ -207,7 +219,8 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
         for mt in mask_targets:
             if mt and mt in masked_c:
                 masked_c = masked_c.replace(mt, "〇〇")
-        clean_cats.append(masked_c)
+        if masked_c != "〇〇" and "行" not in masked_c:
+            clean_cats.append(masked_c)
 
     # リダイレクト（別名）抽出
     redirects = []
@@ -219,7 +232,7 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
         if rt != canonical_title and len(rt) <= 20 and "(" not in rt:
             redirects.append(rt)
 
-    # 内部リンク語抽出（自然な一般名詞・固有名詞のみ厳選）
+    # 内部リンク語抽出
     linked_words = []
     for lk in page.get("links", []):
         lt = normalize_word(lk["title"])
@@ -227,7 +240,7 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
         if is_valid_japanese_vocab(lt_clean, strict_freq=True) and lt_clean not in mask_targets:
             linked_words.append(lt_clean)
 
-    # 2. セクション（目次）取得
+    # セクション（目次）取得
     sec_params = {
         "action": "parse",
         "format": "json",
@@ -247,54 +260,91 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
                         line = line.replace(mt, "〇〇")
                 sections.append(line)
 
-    # 3. 画像とWikimedia Commonsライセンス詳細の取得
-    pageimage_name = page.get("pageimage")
-    if not pageimage_name:
-        raise ValueError(f"記事「{canonical_title}」に代表画像 (pageimage) が設定されていません。")
-
-    img_params = {
-        "action": "query",
-        "format": "json",
-        "titles": f"File:{pageimage_name}",
-        "prop": "imageinfo",
-        "iiprop": "url|extmetadata|user",
-        "iiurlwidth": 800,
-    }
-    img_resp = session.get(WIKI_API_URL, params=img_params, timeout=20)
-    img_resp.raise_for_status()
-    img_pages = img_resp.json().get("query", {}).get("pages", {})
-    img_page = next(iter(img_pages.values()), {})
-    imageinfo_list = img_page.get("imageinfo", [])
-    if not imageinfo_list:
-        raise ValueError(f"画像メタデータが取得できません: File:{pageimage_name}")
-
-    ii = imageinfo_list[0]
-    thumb_url = ii.get("thumburl") or ii.get("url")
-    commons_url = ii.get("descriptionurl", f"https://commons.wikimedia.org/wiki/File:{quote(pageimage_name)}")
-    ext = ii.get("extmetadata", {})
-
-    author = (
-        strip_html(ext.get("Artist", {}).get("value", ""))
-        or strip_html(ext.get("Credit", {}).get("value", ""))
-        or "Wikimedia Commons Contributor"
-    )
-    if len(author) > 80:
-        author = author[:77] + "..."
-    # 「自身の作品」等の定型文しかない場合はアップロード者名で補う
-    if re.search(r"(投稿者自身|自身による著作物|Own work|own work)", author) or author == "Wikimedia Commons Contributor":
-        author = ii.get("user") or author
-
-    license_short = strip_html(ext.get("LicenseShortName", {}).get("value", "CC BY-SA"))
-    license_url = ext.get("LicenseUrl", {}).get("value", "https://creativecommons.org/licenses/by-sa/4.0/")
-
-    # キャプションは日本語記事の導入部1文目を優先（英語等のメタデータ混入防止）
-    first_sentence = intro_extract.split("。")[0] + "。" if intro_extract else canonical_title
-    caption = first_sentence[:140]
-
-    # プレイヤーにとって最も馴染みのある表記（指定タイトル）をターゲット名として採用
     display_target = normalize_word(title)
+    aliases_list = list(dict.fromkeys(redirects))[:20]
+
+    # 文の分割とテキストパズルの構築
+    raw_sentences = [
+        s.strip() + "。"
+        for s in intro_extract.replace("\r", "").split("。")
+        if s.strip()
+    ]
+    if not raw_sentences:
+        raw_sentences = [f"{display_target}に関する記事。"]
+
+    # 文字版パズルの各文伏せ字
+    text_puzzle = {
+        "sentence_1": mask_sentence_text(raw_sentences[0], display_target, aliases_list),
+        "sentence_2": mask_sentence_text(raw_sentences[1], display_target, aliases_list) if len(raw_sentences) > 1 else "",
+        "sentence_3": mask_sentence_text(raw_sentences[2], display_target, aliases_list) if len(raw_sentences) > 2 else "",
+        "sentence_4": mask_sentence_text(raw_sentences[3], display_target, aliases_list) if len(raw_sentences) > 3 else "",
+        "raw_sentences": raw_sentences[:4],
+    }
+
+    # 画像の取得判定
+    pageimage_name = page.get("pageimage")
+    mode = "text"
+    image_meta = None
+
+    if force_mode != "text" and pageimage_name:
+        # SVGやロゴ・アイコン系は除外
+        low_name = pageimage_name.lower()
+        if not low_name.endswith(".svg") and not any(k in low_name for k in ["logo", "icon", "flag", "symbol"]):
+            try:
+                img_params = {
+                    "action": "query",
+                    "format": "json",
+                    "titles": f"File:{pageimage_name}",
+                    "prop": "imageinfo",
+                    "iiprop": "url|extmetadata|user",
+                    "iiurlwidth": 800,
+                }
+                img_resp = session.get(WIKI_API_URL, params=img_params, timeout=20)
+                if img_resp.ok:
+                    img_pages = img_resp.json().get("query", {}).get("pages", {})
+                    img_page = next(iter(img_pages.values()), {})
+                    imageinfo_list = img_page.get("imageinfo", [])
+                    if imageinfo_list:
+                        ii = imageinfo_list[0]
+                        thumb_url = ii.get("thumburl") or ii.get("url")
+                        commons_url = ii.get("descriptionurl", f"https://commons.wikimedia.org/wiki/File:{quote(pageimage_name)}")
+                        ext = ii.get("extmetadata", {})
+
+                        author = (
+                            strip_html(ext.get("Artist", {}).get("value", ""))
+                            or strip_html(ext.get("Credit", {}).get("value", ""))
+                            or "Wikimedia Commons Contributor"
+                        )
+                        if len(author) > 80:
+                            author = author[:77] + "..."
+                        if re.search(r"(投稿者自身|自身による著作物|Own work|own work)", author) or author == "Wikimedia Commons Contributor":
+                            author = ii.get("user") or author
+
+                        license_short = strip_html(ext.get("LicenseShortName", {}).get("value", "CC BY-SA"))
+                        license_url = ext.get("LicenseUrl", {}).get("value", "https://creativecommons.org/licenses/by-sa/4.0/")
+                        first_sentence = raw_sentences[0] if raw_sentences else canonical_title
+                        caption = first_sentence[:140]
+
+                        image_meta = {
+                            "filename": pageimage_name,
+                            "thumb_url": thumb_url,
+                            "commons_url": commons_url,
+                            "author": author,
+                            "license": license_short,
+                            "license_url": license_url,
+                            "caption": caption,
+                        }
+                        mode = "image"
+            except Exception as e:
+                print(f"画像取得スキップ ({pageimage_name}): {e}")
+                mode = "text"
+
+    if force_mode == "image" and mode != "image":
+        print(f"⚠️ 指定された記事「{title}」に適切な画像が見つからないため、文字版として処理します。")
+        mode = "text"
 
     return {
+        "mode": mode,
         "title": display_target,
         "canonical_title": canonical_title,
         "extract": intro_extract,
@@ -302,36 +352,22 @@ def fetch_wikipedia_article(title: str) -> dict[str, Any]:
         "page_length": page_length,
         "categories": clean_cats[:8],
         "sections": sections[:8],
-        "redirects": list(dict.fromkeys(redirects))[:20],
+        "redirects": aliases_list,
         "linked_words": list(dict.fromkeys(linked_words)),
         "article_url": f"https://ja.wikipedia.org/wiki/{quote(canonical_title)}",
-        "image_meta": {
-            "filename": pageimage_name,
-            "thumb_url": thumb_url,
-            "commons_url": commons_url,
-            "author": author,
-            "license": license_short,
-            "license_url": license_url,
-            "caption": caption,
-        },
+        "text_puzzle": text_puzzle,
+        "image_meta": image_meta,
     }
 
 
-def download_and_anonymize_image(thumb_url: str, problem_id: str) -> str:
+def download_and_anonymize_image(thumb_url: str, problem_id: str, images_dir: Path) -> str:
     """
     サムネイル画像をダウンロードし、ファイル名から正解がネタバレしないよう
-    ./data/images/<problem_id>.<ext> として保存する
+    images/<problem_id>.jpg として保存する
     """
-    IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    parsed_path = urlparse(thumb_url).path.lower()
-    ext = ".jpg"
-    if parsed_path.endswith(".png"):
-        ext = ".png"
-    elif parsed_path.endswith(".webp"):
-        ext = ".webp"
-
-    local_filename = f"{problem_id}{ext}"
-    local_path = IMAGES_DIR / local_filename
+    images_dir.mkdir(parents=True, exist_ok=True)
+    local_filename = f"{problem_id}.jpg"
+    local_path = images_dir / local_filename
 
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT})
@@ -361,14 +397,15 @@ def compute_rankings(
     base_vocab: list[str],
     base_embeddings: np.ndarray,
     article_info: dict[str, Any],
-    visual_clues: list[str] | None = None,
     max_words: int = 20000,
 ) -> list[str]:
     """
-    人間にとって直感的で納得感の高いハイブリッド類似度計算:
-    1. ターゲット概念（タイトル＋主要カテゴリ＋視覚モチーフ）との意味類似度
-    2. 記事導入部テキストとの意味類似度
-    3. 記事本文・内部リンク・視覚モチーフ語での共起ボーナス
+    セマンティック距離推測のランキング計算:
+    1. ターゲット単語埋め込みとのコサイン類似度 (0.40)
+    2. ターゲット概念（カテゴリ群）埋め込みとの類似度 (0.35)
+    3. 記事導入部テキスト埋め込みとの類似度 (0.25)
+    4. 内部リンク語・本文登場語の自然な関連度ボーナス
+    （※写っている物への過剰な人工ブーストは廃止し、本来の意味的近さで競う）
     """
     target = article_info["title"]
     canonical = article_info["canonical_title"]
@@ -376,19 +413,12 @@ def compute_rankings(
     body_extract = article_info["body_extract"]
     categories = article_info["categories"]
     linked_set = set(article_info["linked_words"])
-    visual_set = set(visual_clues or [])
 
-    # ベース語彙にない主要内部リンク語・視覚モチーフ語を追加してエンコード
     base_set = set(base_vocab)
-    candidates_extra = list(visual_clues or []) + article_info["linked_words"]
-    extra_words = []
-    seen_extra = set()
-    for w in candidates_extra:
-        if w not in base_set and w != target and w != canonical and w not in seen_extra:
-            seen_extra.add(w)
-            extra_words.append(w)
-            if len(extra_words) >= 800:
-                break
+    extra_words = [
+        w for w in article_info["linked_words"]
+        if w not in base_set and w != target and w != canonical
+    ][:600]
 
     all_words = list(base_vocab)
     if extra_words:
@@ -399,10 +429,9 @@ def compute_rankings(
     else:
         all_embs = base_embeddings
 
-    # ターゲット概念ベクトル
+    # ベクトル生成
     title_emb = model.encode(f"query: {target}", normalize_embeddings=True, show_progress_bar=False)
-    visual_str = " ".join(visual_clues[:6]) if visual_clues else ""
-    concept_text = f"query: {target} {' '.join(categories[:5])} {visual_str}"
+    concept_text = f"query: {target} {' '.join(categories[:5])}"
     concept_emb = model.encode(concept_text, normalize_embeddings=True, show_progress_bar=False)
     summary_text = f"passage: {target}。{extract[:600]}"
     summary_emb = model.encode(summary_text, normalize_embeddings=True, show_progress_bar=False)
@@ -411,33 +440,27 @@ def compute_rankings(
     sim_concept = all_embs @ concept_emb
     sim_summary = all_embs @ summary_emb
 
-    scores = 0.35 * sim_title + 0.35 * sim_concept + 0.30 * sim_summary
+    scores = 0.40 * sim_title + 0.35 * sim_concept + 0.25 * sim_summary
 
-    # 共起・内部リンク・視覚モチーフボーナスと表層文字一致ノイズの補正
     for idx, w in enumerate(all_words):
         if w == target or w == canonical:
             continue
 
-        in_visual = w in visual_set
         in_link = w in linked_set
         in_intro = len(w) >= 2 and (w in extract)
         in_body = len(w) >= 2 and (w in body_extract)
 
-        if in_visual:
-            scores[idx] += 0.085
         if in_link and in_intro:
-            scores[idx] += 0.070
+            scores[idx] += 0.055
         elif in_link and in_body:
-            scores[idx] += 0.050
+            scores[idx] += 0.040
         elif in_intro:
-            scores[idx] += 0.042
+            scores[idx] += 0.035
         elif in_link:
-            scores[idx] += 0.032
-        elif in_body:
-            scores[idx] += 0.020
+            scores[idx] += 0.022
 
-        # カタカナ2〜3文字がターゲット文字列の一部と偶然一致しただけの表層ノイズを抑制
-        if len(w) <= 3 and w in target and not in_link and not in_intro and not in_visual:
+        # ターゲット文字列の一部を含むだけの表層断片ノイズを抑制
+        if len(w) <= 3 and w in target and not in_link and not in_intro:
             scores[idx] -= 0.06
 
     sorted_indices = np.argsort(-scores)
@@ -483,14 +506,33 @@ def generate_problem(
     base_vocab: list[str],
     base_embeddings: np.ndarray,
     extra_aliases: list[str] | None = None,
-    visual_clues: list[str] | None = None,
+    force_mode: str = "auto",
     custom_caption: str | None = None,
+    out_dir: Path | None = None,
     max_words: int = 20000,
 ) -> dict[str, Any]:
-    """1問分の問題データJSONと画像を生成する"""
-    print(f"\n[{problem_id}] 記事「{target_title}」を取得中...")
-    info = fetch_wikipedia_article(target_title)
-    local_img_url = download_and_anonymize_image(info["image_meta"]["thumb_url"], problem_id)
+    """1問分の問題データJSON（および画像版なら画像）を生成する"""
+    dest_dir = out_dir or DATA_DIR
+    images_dir = dest_dir / "images" if dest_dir.name == "data" else dest_dir.parent / "data" / "images"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"\n[{problem_id}] 記事「{target_title}」を取得中 (mode: {force_mode})...")
+    info = fetch_wikipedia_article(target_title, force_mode=force_mode)
+
+    mode = info["mode"]
+    image_obj = None
+
+    if mode == "image" and info["image_meta"]:
+        local_img_url = download_and_anonymize_image(info["image_meta"]["thumb_url"], problem_id, images_dir)
+        caption = custom_caption or info["image_meta"]["caption"]
+        image_obj = {
+            "url": local_img_url,
+            "commons_url": info["image_meta"]["commons_url"],
+            "caption": caption,
+            "author": info["image_meta"]["author"],
+            "license": info["image_meta"]["license"],
+            "license_url": info["image_meta"]["license_url"],
+        }
 
     aliases = list(dict.fromkeys((extra_aliases or []) + info["redirects"]))
     ranked_words = compute_rankings(
@@ -498,32 +540,23 @@ def generate_problem(
         base_vocab,
         base_embeddings,
         info,
-        visual_clues=visual_clues,
         max_words=max_words,
     )
 
     masked_summary = create_masked_summary(info["extract"], info["title"], aliases)
-    caption = custom_caption or info["image_meta"]["caption"]
-
-    # 不適切なメタカテゴリを除外
     clean_cats = [c for c in info["categories"] if c != "〇〇" and "行" not in c][:5]
     if not clean_cats:
         clean_cats = ["哲学・科学の概念"]
 
     problem_data = {
         "id": problem_id,
+        "mode": mode,
         "target": info["title"],
         "aliases": aliases,
         "total_words": len(ranked_words),
         "article_url": info["article_url"],
-        "image": {
-            "url": local_img_url,
-            "commons_url": info["image_meta"]["commons_url"],
-            "caption": caption,
-            "author": info["image_meta"]["author"],
-            "license": info["image_meta"]["license"],
-            "license_url": info["image_meta"]["license_url"],
-        },
+        "image": image_obj,
+        "text_puzzle": info["text_puzzle"],
         "hints": {
             "category": clean_cats,
             "sections": info["sections"][:6],
@@ -535,17 +568,17 @@ def generate_problem(
         "words": ranked_words,
     }
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = DATA_DIR / f"{problem_id}.json"
+    out_path = dest_dir / f"{problem_id}.json"
     out_path.write_text(json.dumps(problem_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     size_kb = out_path.stat().st_size / 1024
-    print(f"[{problem_id}] 生成完了 -> {out_path.name} ({size_kb:.1f} KB), 上位12語: {ranked_words[:12]}")
+    print(f"[{problem_id}] 生成完了 [{mode}版] -> {out_path.name} ({size_kb:.1f} KB), 上位10語: {ranked_words[:10]}")
     return problem_data
 
 
-def update_manifest(problems_meta: list[dict[str, Any]]) -> None:
+def update_manifest(problems_meta: list[dict[str, Any]], manifest_dir: Path | None = None) -> None:
     """問題一覧マニフェスト (/data/manifest.json) を更新する（ネタバレ情報は含めない）"""
-    manifest_path = DATA_DIR / "manifest.json"
+    target_dir = manifest_dir or DATA_DIR
+    manifest_path = target_dir / "manifest.json"
     existing: dict[str, dict[str, Any]] = {}
     if manifest_path.exists():
         try:
@@ -558,6 +591,7 @@ def update_manifest(problems_meta: list[dict[str, Any]]) -> None:
     for p in problems_meta:
         existing[p["id"]] = {
             "id": p["id"],
+            "mode": p.get("mode", "image"),
             "total_words": p["total_words"],
         }
 
@@ -576,10 +610,13 @@ def main() -> None:
     parser.add_argument("--date", type=str, help="問題ID (YYYY-MM-DD)")
     parser.add_argument("--title", type=str, help="Wikipedia記事タイトル")
     parser.add_argument("--aliases", type=str, default="", help="カンマ区切りの追加別名")
-    parser.add_argument("--visuals", type=str, default="", help="カンマ区切りの画像モチーフ語")
-    parser.add_argument("--preset", action="store_true", help="初期収録用の抽象概念問題セット（10問）を一括生成する")
+    parser.add_argument("--mode", type=str, default="auto", choices=["auto", "image", "text"], help="画像版か文字版か")
+    parser.add_argument("--preset", action="store_true", help="初期収録用の10問（画像版＋文字版の混合）を一括生成する")
+    parser.add_argument("--out-dir", type=str, default="", help="出力先ディレクトリ（デフォルト: data/）")
     parser.add_argument("--vocab-size", type=int, default=20000, help="収録語彙数 (デフォルト: 20000)")
     args = parser.parse_args()
+
+    out_dir = Path(args.out_dir) if args.out_dir else DATA_DIR
 
     print("モデル intfloat/multilingual-e5-small をロード中...")
     model = SentenceTransformer("intfloat/multilingual-e5-small")
@@ -588,80 +625,30 @@ def main() -> None:
 
     generated = []
     if args.preset:
-        # 象徴的な画像から抽象概念・事象を推理する厳選10問
+        # 画像版（象徴的な画像がある概念）と文字版（画像がない・抽象度の高い概念）をバランスよく混合
         presets = [
-            (
-                "2026-10-23",
-                "時間",
-                ["じかん", "タイム", "時の流れ"],
-                ["時計", "懐中時計", "時刻", "過去", "未来", "現在", "秒", "針", "暦", "永遠", "空間", "歴史"],
-                "懐中時計。時計は時間を計測・視覚化するための代表的な象徴である。",
-            ),
-            (
-                "2026-10-22",
-                "知識",
-                ["ちしき", "ナレッジ"],
-                ["図書館", "遺跡", "書物", "本", "学問", "学習", "知恵", "情報", "科学", "哲学", "古代ローマ", "認識"],
-                "エフェソスのケルスス図書館跡。図書館は人類の知識の集積を象徴する。",
-            ),
-            (
-                "2026-10-21",
-                "重力",
-                ["じゅうりょく", "万有引力", "引力"],
-                ["銀河", "宇宙", "天体", "惑星", "星", "軌道", "相対性理論", "質量", "物理", "地球", "ブラックホール"],
-                "重力によって相互作用し引き合う2つの銀河（ハッブル宇宙望遠鏡撮影）。",
-            ),
-            (
-                "2026-10-20",
-                "美",
-                ["び", "美しさ", "美的"],
-                ["ステンドグラス", "バラ窓", "大聖堂", "教会", "芸術", "美学", "調和", "対称性", "色彩", "光", "装飾"],
-                "パリ・ノートルダム大聖堂のバラ窓。光の調和と対称性は美の象徴とされる。",
-            ),
-            (
-                "2026-10-19",
-                "思考",
-                ["しこう", "考える", "思索"],
-                ["壁画", "絵画", "ペン", "女性", "ポンペイ", "哲学", "知性", "論理", "心", "意識", "推論", "発想"],
-                "ポンペイの壁画『紙とペンを持つ女』。「思考」や知性を象徴する古代ローマの肖像。",
-            ),
-            (
-                "2026-10-18",
-                "正義",
-                ["せいぎ", "ジャスティス"],
-                ["女神", "彫刻", "石像", "目隠し", "裁判", "裁判所", "法律", "法", "天秤", "剣", "倫理", "道徳", "公平"],
-                "ブラジル連邦最高裁判所前にある、目隠しをして剣を携えた「正義の女神」像。",
-            ),
-            (
-                "2026-10-17",
-                "生命",
-                ["せいめい", "いのち", "命"],
-                ["サンゴ礁", "サンゴ", "海", "海洋", "魚", "生物", "生態系", "進化", "自然", "細胞", "地球", "誕生"],
-                "多様な海洋生物が共生するサンゴ礁。地球上の豊かな生命の象徴。",
-            ),
-            (
-                "2026-10-16",
-                "感情",
-                ["かんじょう", "情動", "気持ち", "喜怒哀楽"],
-                ["顔", "表情", "人間", "心理", "心理学", "喜び", "怒り", "悲しみ", "恐怖", "笑い", "心", "情熱"],
-                "人間の様々な情熱・感情（喜怒哀楽）を表現した16の顔の銅版画（1821年）。",
-            ),
-            (
-                "2026-10-15",
-                "文明",
-                ["ぶんめい", "シヴィライゼーション"],
-                ["スフィンクス", "ピラミッド", "エジプト", "遺跡", "古代", "歴史", "都市", "文化", "人類", "社会", "建築"],
-                "ギザの大スフィンクスとピラミッド。古代エジプトは人類最古の文明のひとつである。",
-            ),
-            (
-                "2026-10-14",
-                "運",
-                ["うん", "幸運", "運勢", "ツキ"],
-                ["クローバー", "四つ葉", "植物", "葉", "幸福", "偶然", "確率", "運命", "縁起", "奇跡", "チャンス"],
-                "幸運の象徴とされる四つ葉のクローバー。",
-            ),
+            # 10/23 (今日): 時間 (画像版: 懐中時計)
+            ("2026-10-23", "時間", ["じかん", "タイム", "時の流れ"], "image", "懐中時計。時間は変化や出来事を認識するための基礎的な概念である。"),
+            # 10/22: 記憶 (文字版: 画像なし・抽象心理/脳科学概念)
+            ("2026-10-22", "記憶", ["きおく", "メモリー"], "text", None),
+            # 10/21: 重力 (画像版: 相互作用銀河)
+            ("2026-10-21", "重力", ["じゅうりょく", "万有引力", "引力"], "image", "重力によって引き合う2つの銀河（ハッブル宇宙望遠鏡撮影）。"),
+            # 10/20: 孤独 (文字版: 心理・社会的状態)
+            ("2026-10-20", "孤独", ["こどく", "孤立", "ソリチュード"], "text", None),
+            # 10/19: 思考 (画像版: ポンペイ壁画)
+            ("2026-10-19", "思考", ["しこう", "考える", "思索"], "image", "ポンペイの壁画『紙とペンを持つ女』。「思考」や知性を象徴する古代ローマの肖像。"),
+            # 10/18: 正義 (画像版: 目隠しの正義の女神)
+            ("2026-10-18", "正義", ["せいぎ", "ジャスティス"], "image", "最高裁判所前にある、目隠しをして剣を携えた「正義の女神」像。"),
+            # 10/17: 意識 (文字版: 哲学・認知科学概念)
+            ("2026-10-17", "意識", ["いしき", "コンシャスネス", "覚醒"], "text", None),
+            # 10/16: 感情 (画像版: 16の表情)
+            ("2026-10-16", "感情", ["かんじょう", "情動", "気持ち", "喜怒哀楽"], "image", "人間の様々な情熱・感情（喜怒哀楽）を表現した16の顔の銅版画。"),
+            # 10/15: 情報 (文字版: 情報理論・通信概念)
+            ("2026-10-15", "情報", ["じょうほう", "インフォメーション"], "text", None),
+            # 10/14: 運 (画像版: 四つ葉のクローバー)
+            ("2026-10-14", "運", ["うん", "幸運", "運勢", "ツキ"], "image", "幸運の象徴とされる四つ葉のクローバー。"),
         ]
-        for pid, title, aliases, visuals, caption in presets:
+        for pid, title, aliases, mode_req, caption in presets:
             try:
                 p = generate_problem(
                     pid,
@@ -670,8 +657,9 @@ def main() -> None:
                     base_vocab,
                     base_embeddings,
                     extra_aliases=aliases,
-                    visual_clues=visuals,
+                    force_mode=mode_req,
                     custom_caption=caption,
+                    out_dir=out_dir,
                     max_words=args.vocab_size,
                 )
                 generated.append(p)
@@ -680,7 +668,6 @@ def main() -> None:
                 print(f"[エラー] {pid} ({title}) の生成に失敗: {e}")
     elif args.date and args.title:
         aliases = [a.strip() for a in args.aliases.split(",") if a.strip()]
-        visuals = [v.strip() for v in args.visuals.split(",") if v.strip()]
         p = generate_problem(
             args.date,
             args.title,
@@ -688,7 +675,8 @@ def main() -> None:
             base_vocab,
             base_embeddings,
             extra_aliases=aliases,
-            visual_clues=visuals,
+            force_mode=args.mode,
+            out_dir=out_dir,
             max_words=args.vocab_size,
         )
         generated.append(p)
@@ -697,7 +685,7 @@ def main() -> None:
         return
 
     if generated:
-        update_manifest(generated)
+        update_manifest(generated, manifest_dir=out_dir)
 
 
 if __name__ == "__main__":
