@@ -1,0 +1,1064 @@
+:root {
+  --bg-page: #0f172a;
+  --bg-card: #1e293b;
+  --bg-card-elevated: #263449;
+  --bg-input: #0b1120;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --text-subtle: #64748b;
+  --border-color: #334155;
+  --accent-primary: #10b981;
+  --accent-hover: #059669;
+  --accent-secondary: #3b82f6;
+
+  /* 順位帯カラー */
+  --rank-top-bg: rgba(16, 185, 129, 0.28);
+  --rank-top-bar: #10b981;
+  --rank-top-border: #34d399;
+
+  --rank-hot-bg: rgba(34, 197, 94, 0.18);
+  --rank-hot-bar: #22c55e;
+  --rank-hot-border: #4ade80;
+
+  --rank-warm-bg: rgba(20, 184, 166, 0.16);
+  --rank-warm-bar: #14b8a6;
+  --rank-warm-border: #2dd4bf;
+
+  --rank-mid-bg: rgba(245, 158, 11, 0.15);
+  --rank-mid-bar: #f59e0b;
+  --rank-mid-border: #fbbf24;
+
+  --rank-cool-bg: rgba(249, 115, 22, 0.13);
+  --rank-cool-bar: #f97316;
+  --rank-cool-border: #fb923c;
+
+  --rank-cold-bg: rgba(100, 116, 139, 0.14);
+  --rank-cold-bar: #475569;
+  --rank-cold-border: #64748b;
+
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --shadow-lg: 0 10px 30px -5px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  background-color: var(--bg-page);
+  color: var(--text-main);
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.app-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 12px 14px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ヘッダー */
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-icon {
+  font-size: 1.7rem;
+  line-height: 1;
+}
+
+.brand-title {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  background: linear-gradient(135deg, #34d399, #60a5fa);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-subtitle {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.problem-select {
+  background: var(--bg-card);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-card-elevated);
+  border-color: var(--text-muted);
+}
+
+/* 画像カード */
+.image-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  box-shadow: var(--shadow-lg);
+}
+
+.image-Status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
+}
+
+.badge-date {
+  color: #38bdf8;
+  font-weight: 600;
+}
+
+.badge-vocab {
+  color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.6);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.image-frame {
+  position: relative;
+  width: 100%;
+  min-height: 210px;
+  max-height: 340px;
+  background: #090d16;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.image-skeleton {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  padding: 40px 16px;
+}
+
+.target-image {
+  max-width: 100%;
+  max-height: 336px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  cursor: zoom-in;
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.zoom-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  background: rgba(15, 23, 42, 0.82);
+  color: var(--text-main);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.zoom-btn:hover {
+  background: rgba(30, 41, 59, 0.95);
+}
+
+/* クリア後の正解＆キャプション表示 */
+.revealed-caption-box {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-sm);
+}
+
+.revealed-answer-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.revealed-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.revealed-target-name {
+  font-size: 1.05rem;
+  color: #34d399;
+}
+
+.wiki-link-btn {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.wiki-link-btn:hover {
+  text-decoration: underline;
+}
+
+.revealed-caption-text {
+  font-size: 0.82rem;
+  color: var(--text-main);
+}
+
+/* Wikimedia クレジット表記 */
+.image-credit {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.credit-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.credit-main a {
+  color: #93c5fd;
+  text-decoration: none;
+}
+
+.credit-main a:hover {
+  text-decoration: underline;
+}
+
+.credit-detail-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.credit-detail-toggle:hover {
+  color: var(--text-main);
+  border-color: var(--text-muted);
+}
+
+.credit-source-drawer {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+}
+
+.spoiler-note {
+  color: #fbbf24;
+  margin-bottom: 3px;
+}
+
+.source-links a {
+  color: #60a5fa;
+}
+
+/* ステータス＆入力フォーム */
+.control-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stat-item {
+  display: flex;
+   align-items: baseline;
+  gap: 5px;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.stat-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.action-pill {
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-elevated);
+  color: var(--text-main);
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.action-pill:hover {
+  border-color: var(--text-muted);
+}
+
+.hint-pill {
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fde68a;
+}
+
+.share-pill {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: #10b981;
+  color: #6ee7b7;
+}
+
+.giveup-pill {
+  color: var(--text-muted);
+}
+
+/* 入力フォーム */
+.input-wrapper {
+  display: flex;
+  gap: 8px;
+}
+
+.guess-input {
+  flex: 1;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1.5px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 11px 14px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.guess-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.guess-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-btn {
+  background: var(--accent-primary);
+  color: #052e16;
+  font-weight: 800;
+  font-size: 0.95rem;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 0 20px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.08s;
+  white-space: nowrap;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: #ffffff;
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 直近の判定カード */
+.latest-guess-container {
+  padding-top: 2px;
+}
+
+.latest-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+/* 推測結果行 (Contexto風バー) */
+.guess-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--rank-cold-bg);
+  border: 1px solid var(--rank-cold-border);
+  overflow: hidden;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.guess-row.latest-highlight {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.22);
+}
+
+.guess-row-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  opacity: 0.26;
+  transition: width 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.guess-row-left,
+.guess-row-right {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guess-num {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  min-width: 26px;
+}
+
+.guess-word {
+  font-weight: 700;
+  font-size: 0.96rem;
+  word-break: break-all;
+}
+
+.guess-hint-tag {
+  font-size: 0.68rem;
+  background: rgba(251, 191, 36, 0.2);
+  color: #fde68a;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.guess-rank-badge {
+  font-weight: 800;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ランク別テーマ */
+.guess-row.tier-top {
+  background: var(--rank-top-bg);
+  border-color: var(--rank-top-border);
+}
+.guess-row.tier-top .guess-row-bar { background: var(--rank-top-bar); }
+.guess-row.tier-top .guess-rank-badge { color: #6ee7b7; }
+
+.guess-row.tier-hot {
+  background: var(--rank-hot-bg);
+  border-color: var(--rank-hot-border);
+}
+.guess-row.tier-hot .guess-row-bar { background: var(--rank-hot-bar); }
+.guess-row.tier-hot .guess-rank-badge { color: #86efac; }
+
+.guess-row.tier-warm {
+  background: var(--rank-warm-bg);
+  border-color: var(--rank-warm-border);
+}
+.guess-row.tier-warm .guess-row-bar { background: var(--rank-warm-bar); }
+.guess-row.tier-warm .guess-rank-badge { color: #5eead4; }
+
+.guess-row.tier-mid {
+  background: var(--rank-mid-bg);
+  border-color: var(--rank-mid-border);
+}
+.guess-row.tier-mid .guess-row-bar { background: var(--rank-mid-bar); }
+.guess-row.tier-mid .guess-rank-badge { color: #fcd34d; }
+
+.guess-row.tier-cool {
+  background: var(--rank-cool-bg);
+  border-color: var(--rank-cool-border);
+}
+.guess-row.tier-cool .guess-row-bar { background: var(--rank-cool-bar); }
+.guess-row.tier-cool .guess-rank-badge { color: #fdba74; }
+
+.guess-row.tier-cold {
+  background: var(--rank-cold-bg);
+  border-color: var(--rank-cold-border);
+}
+.guess-row.tier-cold .guess-row-bar { background: var(--rank-cold-bar); }
+.guess-row.tier-cold .guess-rank-badge { color: #cbd5e1; }
+
+/* ヒントパネル */
+.hints-panel {
+  background: var(--bg-card);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+}
+
+.hints-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hints-title {
+  font-size: 0.98rem;
+  color: #fde68a;
+}
+
+.close-small-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.hints-desc {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 4px 0 10px;
+}
+
+.hints-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hint-card {
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 9px 11px;
+}
+
+.hint-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hint-step-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(251, 191, 36, 0.18);
+  color: #fcd34d;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.hint-card-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.unlock-btn {
+  margin-left: auto;
+  background: var(--bg-card-elevated);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.unlock-btn.accent {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+
+.unlock-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.hint-card-body {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-color);
+  font-size: 0.83rem;
+  color: #e2e8f0;
+}
+
+.hint-subnote {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
+.hint-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 4px;
+}
+
+.hint-tag {
+  background: rgba(51, 65, 85, 0.7);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.76rem;
+}
+
+/* 履歴セクション */
+.history-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 12px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.history-title {
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.sort-toggle {
+  display: flex;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  border: 1px solid var(--border-color);
+}
+
+.sort-btn {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.sort-btn.active {
+  background: var(--bg-card-elevated);
+  color: var(--text-main);
+}
+
+.empty-history {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.quick-try-chips {
+  margin-top: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick-chip-label {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+}
+
+.quick-chip {
+  background: var(--bg-card-elevated);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.quick-chip:hover {
+  border-color: var(--accent-primary);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* フッター */
+.app-footer {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--text-subtle);
+  padding: 8px 0;
+}
+
+/* モーダル */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 22px 20px;
+  box-shadow: var(--shadow-lg);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: var(--bg-card-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.modal-badge-icon {
+  font-size: 2.4rem;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.modal-title {
+  font-size: 1.2rem;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.modal-subtitle {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.result-answer-box {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.result-answer-label {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.result-answer-word {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #34d399;
+  margin: 2px 0 6px;
+}
+
+.result-answer-caption {
+  font-size: 0.8rem;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.modal-wiki-btn {
+  display: inline-block;
+  font-size: 0.8rem;
+  color: #60a5fa;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.result-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.result-stat-box {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  text-align: center;
+}
+
+.result-stat-label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.result-stat-num {
+  font-size: 1.05rem;
+  color: var(--text-main);
+}
+
+.share-preview-wrap {
+  margin-bottom: 12px;
+}
+
+.share-preview-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.share-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-family: monospace;
+  resize: none;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.primary-action-btn {
+  flex: 1;
+  background: var(--accent-primary);
+  color: #052e16;
+  font-weight: 800;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.x-share-btn {
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #334155;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 遊び方説明 */
+.help-content {
+  font-size: 0.86rem;
+  color: var(--text-main);
+  margin-top: 10px;
+}
+
+.help-steps {
+  margin: 10px 0 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rank-legend {
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8rem;
+}
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.legend-dot.rank-top { background: var(--rank-top-bar); }
+.legend-dot.rank-hot { background: var(--rank-hot-bar); }
+.legend-dot.rank-warm { background: var(--rank-warm-bar); }
+.legend-dot.rank-mid { background: var(--rank-mid-bar); }
+.legend-dot.rank-cold { background: var(--rank-cold-bar); }
+
+/* ズームモーダル */
+.zoom-modal-inner {
+  position: relative;
+  max-width: 95vw;
+  max-height: 92vh;
+}
+
+.zoom-image {
+  max-width: 94vw;
+  max-height: 88vh;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+}
+
+.zoom-close {
+  top: -12px;
+  right: -12px;
+  background: #0f172a;
+}
+
+/* トースト通知 */
+.toast-container {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  background: rgba(15, 23, 42, 0.95);
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 9px 16px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-lg);
+  animation: toastIn 0.2s ease;
+}
+
+.toast.warn {
+  border-color: #f59e0b;
+  color: #fde68a;
+}
+
+.toast.success {
+  border-color: #10b981;
+  color: #6ee7b7;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

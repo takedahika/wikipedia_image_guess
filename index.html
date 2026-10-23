@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>WikiLens - Wikipedia画像連想ゲーム</title>
+  <meta name="description" content="Wikipediaの象徴的な画像から対象記事を推理するセマンティック距離推測ゲーム。入力した単語と正解記事の意味的な近さ（ランキング）を手がかりに1位を目指そう！" />
+  <meta property="og:title" content="WikiLens - Wikipedia画像連想ゲーム" />
+  <meta property="og:description" content="Wikipediaの画像から記事名を当てる日替わり連想ゲーム。あなたの語彙力と直感で1位を目指そう！" />
+  <meta property="og:type" content="website" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- トースト通知 -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <div class="app-shell">
+    <!-- ヘッダー -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon" aria-hidden="true">🔍</span>
+        <div>
+          <h1 class="brand-title">WikiLens</h1>
+          <p class="brand-subtitle">Wikipedia画像連想ゲーム</p>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="problem-selector-wrap">
+          <label for="problem-select" class="sr-only">問題を選択</label>
+          <select id="problem-select" class="problem-select" title="問題を選択">
+            <option value="">読み込み中...</option>
+          </select>
+        </div>
+        <button id="btn-help" class="icon-btn" type="button" title="遊び方" aria-label="遊び方">
+          <span>？</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="main-content">
+      <!-- 画像カード (F-01) -->
+      <section class="image-card" aria-label="出題画像">
+        <div class="image-Status-bar">
+          <span id="problem-badge" class="badge-date">📅 本日の問題</span>
+          <span id="vocab-count-badge" class="badge-vocab">辞書: --語</span>
+        </div>
+
+        <div id="image-frame" class="image-frame">
+          <div id="image-skeleton" class="image-skeleton">画像を読み込み中...</div>
+          <img
+            id="target-image"
+            class="target-image hidden"
+            src=""
+            alt="出題されたWikipedia画像（クリックで拡大）"
+          />
+          <button id="btn-zoom" class="zoom-btn" type="button" title="画像を拡大表示" aria-label="画像を拡大表示">
+            🔍 拡大
+          </button>
+        </div>
+
+        <!-- クリア後に表示されるキャプション -->
+        <div id="revealed-caption-box" class="revealed-caption-box hidden">
+          <div class="revealed-answer-row">
+            <span class="revealed-label">正解記事:</span>
+            <strong id="revealed-target-name" class="revealed-target-name"></strong>
+            <a id="revealed-wiki-link" href="#" target="_blank" rel="noopener noreferrer" class="wiki-link-btn">
+              Wikipediaで読む ↗
+            </a>
+          </div>
+          <p id="revealed-caption-text" class="revealed-caption-text"></p>
+        </div>
+
+        <!-- Wikimedia Commons ライセンス・クレジット表記 (5.3 準拠) -->
+        <footer class="image-credit">
+          <div class="credit-main">
+            <span>Photo: <strong id="credit-author">-</strong></span>
+            <span class="credit-sep">·</span>
+            <a id="credit-license" href="#" target="_blank" rel="noopener noreferrer">CC License</a>
+            <span class="credit-sep">·</span>
+            <span>via Wikimedia Commons</span>
+            <button id="btn-toggle-source" type="button" class="credit-detail-toggle">
+              出典詳細
+            </button>
+          </div>
+          <div id="credit-source-drawer" class="credit-source-drawer hidden">
+            <p class="spoiler-note">
+              ⚠️ リンク先のファイル名には<strong>正解記事名のネタバレ</strong>が含まれます。
+            </p>
+            <p class="source-links">
+              <a id="credit-commons-url" href="#" target="_blank" rel="noopener noreferrer">
+                Wikimedia Commons 元ファイルページを開く ↗
+              </a>
+              <span>（画像はトリミング等の改変なし・サムネイル表示）</span>
+            </p>
+          </div>
+        </footer>
+      </section>
+
+      <!-- ステータス＆入力フォーム (F-02) -->
+      <section class="control-section" aria-label="解答入力">
+        <div class="stats-bar">
+          <div class="stat-item">
+            <span class="stat-label">試行回数</span>
+            <strong id="stat-attempts" class="stat-value">0</strong>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">最高順位</span>
+            <strong id="stat-best-rank" class="stat-value">-</strong>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">ヒント</span>
+            <strong id="stat-hints" class="stat-value">0</strong>
+          </div>
+          <div class="stat-actions">
+            <button id="btn-open-hints" type="button" class="action-pill hint-pill">
+              💡 ヒント
+            </button>
+            <button id="btn-result-modal" type="button" class="action-pill share-pill hidden">
+              🏆 結果・シェア
+            </button>
+            <button id="btn-giveup" type="button" class="action-pill giveup-pill">
+              🏳️ 降参
+            </button>
+          </div>
+        </div>
+
+        <!-- 単語入力フォーム -->
+        <form id="guess-form" class="guess-form" autocomplete="off">
+          <div class="input-wrapper">
+            <input
+              id="guess-input"
+              type="text"
+              class="guess-input"
+              placeholder="画像から連想する単語を入力（例: 建物、歴史、京都…）"
+              maxlength="30"
+              enterkeyhint="send"
+              required
+            />
+            <button id="btn-submit" type="submit" class="submit-btn">
+              判定
+            </button>
+          </div>
+        </form>
+
+        <!-- 直近の入力結果ハイライト -->
+        <div id="latest-guess-container" class="latest-guess-container hidden" aria-live="polite">
+          <div class="latest-label">直近の判定</div>
+          <div id="latest-guess-card" class="guess-row latest-highlight"></div>
+        </div>
+      </section>
+
+      <!-- ヒントドロワー (F-04) -->
+      <section id="hints-panel" class="hints-panel hidden" aria-label="ヒントパネル">
+        <div class="hints-header">
+          <h2 class="hints-title">💡 段階的ヒント</h2>
+          <button id="btn-close-hints" type="button" class="close-small-btn" aria-label="ヒントを閉じる">✕</button>
+        </div>
+        <p class="hints-desc">手詰まりのときは段階的にヒントを開放できます。</p>
+
+        <div class="hints-grid">
+          <!-- ヒント1: カテゴリと記事文字数 -->
+          <div class="hint-card">
+            <div class="hint-card-header">
+              <span class="hint-step-badge">ヒント 1</span>
+              <span class="hint-card-name">記事のカテゴリ・規模</span>
+              <button id="btn-unlock-hint1" type="button" class="unlock-btn" data-hint="1">開放する</button>
+            </div>
+            <div id="hint1-content" class="hint-card-body hidden"></div>
+          </div>
+
+          <!-- ヒント2: 目次セクション・文字数・頭文字 -->
+          <div class="hint-card">
+            <div class="hint-card-header">
+              <span class="hint-step-badge">ヒント 2</span>
+              <span class="hint-card-name">記事の目次構成・文字数</span>
+              <button id="btn-unlock-hint2" type="button" class="unlock-btn" data-hint="2">開放する</button>
+            </div>
+            <div id="hint2-content" class="hint-card-body hidden"></div>
+          </div>
+
+          <!-- ヒント3: 導入文の伏せ字抜粋 -->
+          <div class="hint-card">
+            <div class="hint-card-header">
+              <span class="hint-step-badge">ヒント 3</span>
+              <span class="hint-card-name">記事冒頭の伏せ字テキスト</span>
+              <button id="btn-unlock-hint3" type="button" class="unlock-btn" data-hint="3">開放する</button>
+            </div>
+            <div id="hint3-content" class="hint-card-body hidden"></div>
+          </div>
+
+          <!-- ワードヒント: 近い順位の単語を1つ教えてもらう -->
+          <div class="hint-card">
+            <div class="hint-card-header">
+              <span class="hint-step-badge">お助け単語</span>
+              <span class="hint-card-name">現在より正解に近い単語を1つ開示</span>
+              <button id="btn-word-hint" type="button" class="unlock-btn accent">単語ヒントを出す</button>
+            </div>
+            <p class="hint-subnote">あなたの最高順位に応じて、さらに上位（300位 → 100位 → 30位 → 10位）の関連単語を履歴に追加します。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 履歴リスト・ソート (F-03) -->
+      <section class="history-section" aria-label="推測履歴">
+        <div class="history-header">
+          <h2 class="history-title">推測履歴 (<span id="history-count">0</span>)</h2>
+          <div class="sort-toggle" role="group" aria-label="並び替え">
+            <button id="sort-by-rank" type="button" class="sort-btn active" data-sort="rank">
+              順位順 ▲
+            </button>
+            <button id="sort-by-time" type="button" class="sort-btn" data-sort="time">
+              入力順 ▼
+            </button>
+          </div>
+        </div>
+
+        <div id="empty-history" class="empty-history">
+          <p>まだ単語が入力されていません。<br />画像に写っているものや、連想する言葉を入力してみましょう！</p>
+          <div class="quick-try-chips">
+            <span class="quick-chip-label">お試し入力:</span>
+            <button type="button" class="quick-chip" data-word="日本">日本</button>
+            <button type="button" class="quick-chip" data-word="歴史">歴史</button>
+            <button type="button" class="quick-chip" data-word="自然">自然</button>
+            <button type="button" class="quick-chip" data-word="科学">科学</button>
+            <button type="button" class="quick-chip" data-word="芸術">芸術</button>
+          </div>
+        </div>
+
+        <div id="history-list" class="history-list" role="list"></div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>
+        WikiLens — Powered by Wikipedia &amp; Wikimedia Commons (`multilingual-e5-small`).
+        進行状況はお使いのブラウザ内（LocalStorage）にのみ保存されます。
+      </p>
+    </footer>
+  </div>
+
+  <!-- クリア / 結果シェアモーダル (F-05) -->
+  <div id="result-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-result-title">
+    <div class="modal-card">
+      <button id="btn-close-result" type="button" class="modal-close-btn" aria-label="閉じる">✕</button>
+      <div id="modal-badge-icon" class="modal-badge-icon">🎉</div>
+      <h2 id="modal-result-title" class="modal-title">正解！クリアおめでとうございます！</h2>
+      <p id="modal-result-subtitle" class="modal-subtitle"></p>
+
+      <div class="result-answer-box">
+        <div class="result-answer-label">本日の正解記事</div>
+        <div id="modal-answer-word" class="result-answer-word">-</div>
+        <p id="modal-answer-caption" class="result-answer-caption"></p>
+        <a id="modal-wiki-url" href="#" target="_blank" rel="noopener noreferrer" class="modal-wiki-btn">
+          📖 Wikipedia記事を読む ↗
+        </a>
+      </div>
+
+      <div class="result-stats-grid">
+        <div class="result-stat-box">
+          <span class="result-stat-label">試行回数</span>
+          <strong id="modal-stat-attempts" class="result-stat-num">0</strong>
+        </div>
+        <div class="result-stat-box">
+          <span class="result-stat-label">最高順位</span>
+          <strong id="modal-stat-best" class="result-stat-num">1位</strong>
+        </div>
+        <div class="result-stat-box">
+          <span class="result-stat-label">ヒント使用</span>
+          <strong id="modal-stat-hints" class="result-stat-num">0回</strong>
+        </div>
+      </div>
+
+      <div class="share-preview-wrap">
+        <label for="share-textarea" class="share-preview-label">シェア用テキスト</label>
+        <textarea id="share-textarea" class="share-textarea" rows="5" readonly></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-copy-share" type="button" class="primary-action-btn">
+          📋 結果をコピー
+        </button>
+        <a id="btn-x-share" href="#" target="_blank" rel="noopener noreferrer" class="x-share-btn">
+          𝕏 でポスト
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 遊び方モーダル -->
+  <div id="help-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-help-title">
+    <div class="modal-card">
+      <button id="btn-close-help" type="button" class="modal-close-btn" aria-label="閉じる">✕</button>
+      <h2 id="modal-help-title" class="modal-title">🔍 WikiLens の遊び方</h2>
+      <div class="help-content">
+        <p><strong>WikiLens</strong> は、表示されたWikipediaの象徴的な「画像」から、その<strong>元のWikipedia記事名（1位）</strong>を推理するゲームです。</p>
+        <ol class="help-steps">
+          <li><strong>単語を入力する</strong>: 画像に写っているもの、場所、時代、ジャンルなど、連想する日本語の名詞を入力します。</li>
+          <li><strong>順位（距離）を手がかりにする</strong>: AI埋め込みモデル（E5）が計算した「正解記事との意味的な近さ」が <strong>1位〜20,000位</strong> のランキングで表示されます。</li>
+          <li><strong>1位を当てたらクリア！</strong>: 数字が小さい（緑色に近い）ほど正解に近いです。段階的ヒントも活用して1位を目指しましょう。</li>
+        </ol>
+        <div class="rank-legend">
+          <div class="legend-row"><span class="legend-dot rank-top"></span> <strong>1位</strong>: 正解！🎯</div>
+          <div class="legend-row"><span class="legend-dot rank-hot"></span> <strong>2〜100位</strong>: 非常に近い 🔥</div>
+          <div class="legend-row"><span class="legend-dot rank-warm"></span> <strong>101〜500位</strong>: かなり近い ✨</div>
+          <div class="legend-row"><span class="legend-dot rank-mid"></span> <strong>501〜2,000位</strong>: 関連あり 💡</div>
+          <div class="legend-row"><span class="legend-dot rank-cold"></span> <strong>2,001位〜</strong>: 遠い ❄️</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 画像ズームモーダル -->
+  <div id="zoom-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-label="拡大画像">
+    <div class="zoom-modal-inner">
+      <button id="btn-close-zoom" type="button" class="modal-close-btn zoom-close" aria-label="拡大表示を閉じる">✕</button>
+      <img id="zoom-image" class="zoom-image" src="" alt="拡大された出題画像" />
+    </div>
+  </div>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

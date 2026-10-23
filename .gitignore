@@ -1,0 +1,25 @@
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Python / Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.uv_cache/
+*.egg-info/
+
+# Secrets & Local Configs
+.env
+.env.*
+*.local
+*.key
+*.pem
+
+# Temporary cache for embeddings
+scripts/.cache/
