@@ -11,7 +11,7 @@
 (() => {
   "use strict";
 
-  const STORAGE_PREFIX = "wikilens_state_v3_";
+  const STORAGE_PREFIX = "wikilens_state_v4_";
   const MAX_TRIES = 6;
 
   // アプリケーション状態
@@ -155,31 +155,83 @@
   }
 
   /**
-   * 順位の表示スタイルと絵文字を算出
+   * 正解との距離とビジュアルスタイル（絵文字・幅・色帯・ラベル）を算出
+   * rank 1 (正解) -> distance 0
+   * rank 2 -> distance 1
    */
   function getRankVisuals(rank, totalWords) {
     const total = totalWords || 20000;
-    if (rank === 1) {
-      return { tier: "tier-top", widthPct: 100, emoji: "🎯", colorEmoji: "🟩" };
+    const distance = Math.max(0, rank - 1);
+
+    if (distance === 0) {
+      return {
+        distance: 0,
+        tier: "tier-top",
+        widthPct: 100,
+        emoji: "🎯",
+        colorEmoji: "🟩",
+        label: "距離 0 🎯 正解！",
+        shortLabel: "距離 0",
+      };
     }
-    if (rank <= 100) {
-      const pct = Math.max(82, 99 - (rank / 100) * 17);
-      return { tier: "tier-hot", widthPct: pct, emoji: "🔥", colorEmoji: "🟩" };
+    if (distance <= 99) {
+      const pct = Math.max(82, 99 - (distance / 99) * 17);
+      return {
+        distance,
+        tier: "tier-hot",
+        widthPct: pct,
+        emoji: "🔥",
+        colorEmoji: "🟩",
+        label: `距離 ${distance} 🔥`,
+        shortLabel: `距離 ${distance}`,
+      };
     }
-    if (rank <= 500) {
-      const pct = Math.max(62, 82 - ((rank - 100) / 400) * 20);
-      return { tier: "tier-warm", widthPct: pct, emoji: "✨", colorEmoji: "🟦" };
+    if (distance <= 499) {
+      const pct = Math.max(62, 82 - ((distance - 100) / 400) * 20);
+      return {
+        distance,
+        tier: "tier-warm",
+        widthPct: pct,
+        emoji: "✨",
+        colorEmoji: "🟦",
+        label: `距離 ${distance} ✨`,
+        shortLabel: `距離 ${distance}`,
+      };
     }
-    if (rank <= 2000) {
-      const pct = Math.max(38, 62 - ((rank - 500) / 1500) * 24);
-      return { tier: "tier-mid", widthPct: pct, emoji: "💡", colorEmoji: "🟨" };
+    if (distance <= 1999) {
+      const pct = Math.max(38, 62 - ((distance - 500) / 1500) * 24);
+      return {
+        distance,
+        tier: "tier-mid",
+        widthPct: pct,
+        emoji: "💡",
+        colorEmoji: "🟨",
+        label: `距離 ${distance.toLocaleString()} 💡`,
+        shortLabel: `距離 ${distance.toLocaleString()}`,
+      };
     }
-    if (rank <= 5000) {
-      const pct = Math.max(18, 38 - ((rank - 2000) / 3000) * 20);
-      return { tier: "tier-cool", widthPct: pct, emoji: "🟠", colorEmoji: "🟧" };
+    if (distance <= 4999) {
+      const pct = Math.max(18, 38 - ((distance - 2000) / 3000) * 20);
+      return {
+        distance,
+        tier: "tier-cool",
+        widthPct: pct,
+        emoji: "🟠",
+        colorEmoji: "🟧",
+        label: `距離 ${distance.toLocaleString()} 🟠`,
+        shortLabel: `距離 ${distance.toLocaleString()}`,
+      };
     }
-    const pct = Math.max(5, 18 - ((rank - 5000) / Math.max(1, total - 5000)) * 13);
-    return { tier: "tier-cold", widthPct: pct, emoji: "❄️", colorEmoji: "⬜" };
+    const pct = Math.max(5, 18 - ((distance - 5000) / Math.max(1, total - 5000)) * 13);
+    return {
+      distance,
+      tier: "tier-cold",
+      widthPct: pct,
+      emoji: "❄️",
+      colorEmoji: "⬜",
+      label: `距離 ${distance.toLocaleString()} ❄️`,
+      shortLabel: `距離 ${distance.toLocaleString()}`,
+    };
   }
 
   /**
@@ -238,7 +290,7 @@
    */
   function createGuessRowElement(item, highlight = false) {
     const total = state.problem?.total_words || 20000;
-    const { tier, widthPct, emoji } = getRankVisuals(item.rank, total);
+    const { tier, widthPct, label } = getRankVisuals(item.rank, total);
 
     const row = document.createElement("div");
     row.className = `guess-row ${tier}${highlight ? " latest-highlight" : ""}`;
@@ -267,7 +319,7 @@
 
     const rankBadge = document.createElement("span");
     rankBadge.className = "guess-rank-badge";
-    rankBadge.textContent = item.rank === 1 ? `1位 ${emoji} 正解！` : `${item.rank.toLocaleString()}位 ${emoji}`;
+    rankBadge.textContent = label;
 
     right.appendChild(rankBadge);
 
@@ -299,10 +351,10 @@
       const guessItem = state.guesses[index];
 
       if (guessItem) {
-        const { tier, emoji } = getRankVisuals(guessItem.rank, state.problem.total_words);
+        const { tier, distance } = getRankVisuals(guessItem.rank, state.problem.total_words);
         slot.classList.add(tier);
-        slot.innerHTML = guessItem.rank === 1 ? "🎯" : `<span class="slot-rank-mini">${guessItem.rank}</span>`;
-        slot.title = `#${slotNum}: ${guessItem.word} (${guessItem.rank}位)`;
+        slot.innerHTML = guessItem.rank === 1 ? "🎯" : `<span class="slot-rank-mini">${distance}</span>`;
+        slot.title = `#${slotNum}: ${guessItem.word} (${guessItem.rank === 1 ? "正解！" : "正解との距離: " + distance})`;
       } else if (slotNum === state.guesses.length + 1 && !isFinished) {
         slot.classList.add("active");
         slot.innerHTML = `<span class="slot-num">${slotNum}</span>`;
@@ -334,8 +386,8 @@
         "";
     } else {
       el.guessInput.placeholder = state.problem.mode === "text"
-        ? "文脈から連想する単語・概念を入力（例: 記憶、心理、意識…）"
-        : "写っている物や、象徴する概念を入力（例: 時計、宇宙、哲学…）";
+        ? "文脈から連想する言葉を入力（距離0で正解！）"
+        : "写っている物や象徴する概念を入力（距離0で正解！）";
       el.revealedCaptionBox.classList.add("hidden");
     }
 
@@ -408,17 +460,35 @@
   }
 
   /**
-   * 段階的ヒントタイムラインの描画
+   * 段階的ヒントタイムラインの描画（全4段階）
+   * 挑戦回数 1〜2回目 (0〜1回ミス): ヒントなし（自力挑戦）
+   * 挑戦回数 3回目 (2回ミス): ヒント 1 (🏷️ 所属カテゴリ)
+   * 挑戦回数 4回目 (3回ミス): ヒント 2 (🔤 記事名の文字数)
+   * 挑戦回数 5回目 (4回ミス): ヒント 3 (📑 目次セクション構成)
+   * 挑戦回数 6回目 (5回ミス): ヒント 4 (💡 最初の1文字 ＆ 📝 導入部伏せ字抜粋)
    */
   function renderHintsTimeline(missesCount, isFinished) {
     const h = state.problem.hints || {};
-    const unlockedCount = isFinished ? 5 : Math.min(5, missesCount);
-    el.unlockedHintsCount.textContent = String(unlockedCount);
+    let unlockedCount = 0;
+    if (isFinished) {
+      unlockedCount = 4;
+    } else if (missesCount >= 5) {
+      unlockedCount = 4;
+    } else if (missesCount >= 4) {
+      unlockedCount = 3;
+    } else if (missesCount >= 3) {
+      unlockedCount = 2;
+    } else if (missesCount >= 2) {
+      unlockedCount = 1;
+    } else {
+      unlockedCount = 0;
+    }
 
+    el.unlockedHintsCount.textContent = String(unlockedCount);
     el.hintEmptyState.classList.toggle("hidden", unlockedCount > 0);
 
-    // ヒント1: カテゴリ (1回外し)
-    if (missesCount >= 1 || isFinished) {
+    // ヒント1: カテゴリ (3回目挑戦時 / 2個入力後)
+    if (missesCount >= 2 || isFinished) {
       el.hintItem1.classList.remove("hidden");
       const cats = Array.isArray(h.category) && h.category.length > 0
         ? h.category.map((c) => `<span class="hint-tag">${escapeHtml(c)}</span>`).join("")
@@ -428,8 +498,8 @@
       el.hintItem1.classList.add("hidden");
     }
 
-    // ヒント2: 文字数 (2回外し)
-    if (missesCount >= 2 || isFinished) {
+    // ヒント2: 文字数 (4回目挑戦時 / 3個入力後)
+    if (missesCount >= 3 || isFinished) {
       el.hintItem2.classList.remove("hidden");
       const len = h.char_length || state.problem.target.length;
       el.hintItem2Body.innerHTML = `<strong>${len} 文字</strong> の日本語概念です。`;
@@ -437,8 +507,8 @@
       el.hintItem2.classList.add("hidden");
     }
 
-    // ヒント3: 目次セクション (3回外し)
-    if (missesCount >= 3 || isFinished) {
+    // ヒント3: 目次セクション (5回目挑戦時 / 4個入力後)
+    if (missesCount >= 4 || isFinished) {
       el.hintItem3.classList.remove("hidden");
       const secs = Array.isArray(h.sections) && h.sections.length > 0
         ? h.sections.map((s) => `<span class="hint-tag">§ ${escapeHtml(s)}</span>`).join("")
@@ -448,20 +518,20 @@
       el.hintItem3.classList.add("hidden");
     }
 
-    // ヒント4: 冒頭伏せ字抜粋 (4回外し)
-    if (missesCount >= 4 || isFinished) {
+    // ヒント4: 頭文字 & 冒頭伏せ字抜粋 (6回目挑戦時 / 5個入力後・ラストチャンス)
+    if (missesCount >= 5 || isFinished) {
       el.hintItem4.classList.remove("hidden");
-      el.hintItem4Body.innerHTML = `<blockquote>${escapeHtml(h.masked_summary || "（データなし）")}</blockquote>`;
+      const ch = h.first_char || state.problem.target[0];
+      const masked = h.masked_summary || "（データなし）";
+      el.hintItem4Body.innerHTML = `
+        <div style="margin-bottom: 8px;">記事名の最初の文字は「<strong>${escapeHtml(ch)}</strong>」です！</div>
+        <blockquote>${escapeHtml(masked)}</blockquote>
+      `;
     } else {
       el.hintItem4.classList.add("hidden");
     }
 
-    // ヒント5: 頭文字 (5回外し・ラストチャンス)
-    if (missesCount >= 5 || isFinished) {
-      el.hintItem5.classList.remove("hidden");
-      const ch = h.first_char || state.problem.target[0];
-      el.hintItem5Body.innerHTML = `記事名の最初の文字は「<strong>${escapeHtml(ch)}</strong>」です！`;
-    } else {
+    if (el.hintItem5) {
       el.hintItem5.classList.add("hidden");
     }
   }
@@ -521,7 +591,8 @@
     if (existing) {
       state.lastGuessWord = existing.word;
       renderUI();
-      showToast(`「${existing.word}」はすでに入力済みです（#${existing.attemptNum}回目 / ${existing.rank.toLocaleString()}位）`, "info");
+      const existingDist = Math.max(0, existing.rank - 1);
+      showToast(`「${existing.word}」はすでに入力済みです（#${existing.attemptNum}回目 / 距離: ${existingDist.toLocaleString()}）`, "info");
       return;
     }
 
@@ -578,8 +649,8 @@
     if (!state.problem) return;
 
     const attemptsCount = state.guesses.length;
-    const bestRank = state.guesses.length > 0
-      ? Math.min(...state.guesses.map((g) => g.rank))
+    const minDistance = state.guesses.length > 0
+      ? Math.min(...state.guesses.map((g) => Math.max(0, g.rank - 1)))
       : null;
 
     if (state.cleared) {
@@ -603,7 +674,7 @@
       state.problem.article_url ||
       `https://ja.wikipedia.org/wiki/${encodeURIComponent(state.problem.target)}`;
 
-    el.modalStatBest.textContent = bestRank ? `${bestRank.toLocaleString()}位` : "-";
+    el.modalStatBest.textContent = minDistance !== null ? `距離 ${minDistance.toLocaleString()}` : "-";
     el.modalStatMode.textContent = state.problem.mode === "text" ? "📝 文字版" : "🖼️ 画像版";
 
     const shareText = buildShareText();
@@ -624,12 +695,12 @@
       : `🏳️ X/${MAX_TRIES}（ゲームオーバー） (${modeStr})`;
 
     const rows = state.guesses.map((g) => {
-      const { colorEmoji } = getRankVisuals(g.rank, state.problem.total_words);
+      const { colorEmoji, distance } = getRankVisuals(g.rank, state.problem.total_words);
       const slotNum = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣"][g.attemptNum - 1] || "▪️";
       if (g.isWin) {
-        return `${slotNum} 🎯 1位（正解！）`;
+        return `${slotNum} 🎯 距離 0（正解！）`;
       }
-      return `${slotNum} ${colorEmoji} ${g.rank.toLocaleString()}位`;
+      return `${slotNum} ${colorEmoji} 距離 ${distance.toLocaleString()}`;
     });
 
     const pageUrl = window.location.origin + window.location.pathname;
@@ -639,7 +710,7 @@
       "",
       ...rows,
       "",
-      `#WikiLens #Wikipedia画像連想ゲーム`,
+      `#WikiLens #Wikipedia連想ゲーム`,
       pageUrl,
     ].join("\n");
   }

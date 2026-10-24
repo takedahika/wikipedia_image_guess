@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
   <title>WikiLens - Wikipedia画像・文脈連想ゲーム</title>
-  <meta name="description" content="Wikipediaの象徴的な画像や冒頭文から対象記事（抽象概念）を推理する日替わり連想ゲーム。6回の挑戦でセマンティック距離を縮め、1位を目指そう！" />
+  <meta name="description" content="Wikipediaの象徴的な画像や冒頭文から対象記事（抽象概念）を推理する日替わり連想ゲーム。6回の挑戦で答えとの距離を縮め、距離0（正解）を目指そう！" />
   <meta property="og:title" content="WikiLens - Wikipedia画像・文脈連想ゲーム" />
-  <meta property="og:description" content="Wikipediaの画像や文章から記事名を当てる日替わり連想ゲーム。6回以内に1位を的中させよう！" />
+  <meta property="og:description" content="Wikipediaの画像や文章から記事名を当てる日替わり連想ゲーム。6回以内に答えとの距離0を的中させよう！" />
   <meta property="og:type" content="website" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>" />
   <link rel="stylesheet" href="./style.css" />
@@ -72,10 +72,10 @@
           <div class="text-sentences-container">
             <div id="text-sentence-1" class="text-sentence active"></div>
             <div id="text-sentence-2" class="text-sentence locked">
-              <span class="sentence-lock-tag">🔒 2回外すと開放</span>
+              <span class="sentence-lock-tag">🔒 2回外すと開放（3回目挑戦時）</span>
             </div>
             <div id="text-sentence-3" class="text-sentence locked">
-              <span class="sentence-lock-tag">🔒 4回外すと開放</span>
+              <span class="sentence-lock-tag">🔒 4回外すと開放（5回目挑戦時）</span>
             </div>
           </div>
         </div>
@@ -171,52 +171,45 @@
         </div>
       </section>
 
-      <!-- 外すたびに自動開放される段階的ヒントエリア -->
+      <!-- 外すたびに自動開放される段階的ヒントエリア（3回目の挑戦から順次登場） -->
       <section class="hints-timeline-section" aria-label="ヒント">
         <div class="hints-timeline-header">
-          <span class="hints-timeline-title">💡 開放されたヒント (<span id="unlocked-hints-count">0</span>/5)</span>
-          <span class="hints-timeline-note">外すたびにヒントが1つずつ自動開放されます</span>
+          <span class="hints-timeline-title">💡 開放されたヒント (<span id="unlocked-hints-count">0</span>/4)</span>
+          <span class="hints-timeline-note">挑戦回数が3・4・5・6回目になると順次自動開放されます</span>
         </div>
 
         <div id="hints-timeline-list" class="hints-timeline-list">
-          <!-- 初期状態（0回外し）案内 -->
+          <!-- 初期状態（0〜1回外し）案内 -->
           <div id="hint-empty-state" class="hint-empty-state">
-            <span>不正解になると、ここにカテゴリや文字数などのヒントが自動で追加されます。</span>
+            <span>2回外すと、3回目の挑戦時にカテゴリや文字数などのヒントが順次開放されます。</span>
           </div>
 
-          <!-- ヒント1: カテゴリ (1回外し) -->
+          <!-- ヒント1: カテゴリ (3回目挑戦時 / 2個入力後) -->
           <div id="hint-item-1" class="hint-timeline-item hidden">
-            <div class="hint-item-badge">ヒント 1 (1回外し)</div>
+            <div class="hint-item-badge">ヒント 1（3回目挑戦時 / 2個入力後）</div>
             <div class="hint-item-title">🏷️ 所属カテゴリ</div>
             <div id="hint-item-1-body" class="hint-item-body"></div>
           </div>
 
-          <!-- ヒント2: 文字数 (2回外し) -->
+          <!-- ヒント2: 文字数 (4回目挑戦時 / 3個入力後) -->
           <div id="hint-item-2" class="hint-timeline-item hidden">
-            <div class="hint-item-badge">ヒント 2 (2回外し)</div>
+            <div class="hint-item-badge">ヒント 2（4回目挑戦時 / 3個入力後）</div>
             <div class="hint-item-title">🔤 記事名の文字数</div>
             <div id="hint-item-2-body" class="hint-item-body"></div>
           </div>
 
-          <!-- ヒント3: 目次セクション (3回外し) -->
+          <!-- ヒント3: 目次セクション (5回目挑戦時 / 4個入力後) -->
           <div id="hint-item-3" class="hint-timeline-item hidden">
-            <div class="hint-item-badge">ヒント 3 (3回外し)</div>
+            <div class="hint-item-badge">ヒント 3（5回目挑戦時 / 4個入力後）</div>
             <div class="hint-item-title">📑 記事の目次（セクション構成）</div>
             <div id="hint-item-3-body" class="hint-item-body"></div>
           </div>
 
-          <!-- ヒント4: 冒頭伏せ字抜粋 (4回外し) -->
+          <!-- ヒント4: 冒頭伏せ字抜粋 & 頭文字 (6回目挑戦時 / 5個入力後・ラストチャンス) -->
           <div id="hint-item-4" class="hint-timeline-item hidden">
-            <div class="hint-item-badge">ヒント 4 (4回外し)</div>
-            <div class="hint-item-title">📝 導入部の伏せ字抜粋</div>
+            <div class="hint-item-badge">ヒント 4（6回目挑戦時 / ラストチャンス）</div>
+            <div class="hint-item-title">💡 記事名の最初の1文字 ＆ 📝 導入部</div>
             <div id="hint-item-4-body" class="hint-item-body"></div>
-          </div>
-
-          <!-- ヒント5: 頭文字 (5回外し) -->
-          <div id="hint-item-5" class="hint-timeline-item hidden">
-            <div class="hint-item-badge">ヒント 5 (5回外し・ラストチャンス)</div>
-            <div class="hint-item-title">💡 記事名の最初の文字</div>
-            <div id="hint-item-5-body" class="hint-item-body"></div>
           </div>
         </div>
       </section>
@@ -230,13 +223,13 @@
               入力順 ▼
             </button>
             <button id="sort-by-rank" type="button" class="sort-btn" data-sort="rank">
-              近い順 ▲
+              距離が近い順 ▲
             </button>
           </div>
         </div>
 
         <div id="empty-history" class="empty-history">
-          <p>まだ単語が入力されていません。<br />思いついた言葉を送信すると、正解との近さ（順位）が判定されます。</p>
+          <p>まだ単語が入力されていません。<br />思いついた言葉を送信すると、答えとの距離（0が正解！）が判定されます。</p>
           <div class="quick-try-chips">
             <span class="quick-chip-label">お試し入力:</span>
             <button type="button" class="quick-chip" data-word="人間">人間</button>
@@ -282,8 +275,8 @@
           <strong id="modal-stat-attempts" class="result-stat-num">3/6</strong>
         </div>
         <div class="result-stat-box">
-          <span class="result-stat-label">最高順位</span>
-          <strong id="modal-stat-best" class="result-stat-num">1位</strong>
+          <span class="result-stat-label">最小距離</span>
+          <strong id="modal-stat-best" class="result-stat-num">距離 0</strong>
         </div>
         <div class="result-stat-box">
           <span class="result-stat-label">出題形式</span>
@@ -316,24 +309,24 @@
         <p><strong>WikiLens</strong> は、Wikipediaの象徴的な「画像」や「冒頭の文章」から、対象の記事（抽象概念など）を推理する日替わり連想ゲームです。</p>
         <ol class="help-steps">
           <li><strong>挑戦は最大6回まで</strong>: 1問につき6回まで単語を入力できます。</li>
-          <li><strong>意味の近さ（順位）を判定</strong>: 単語を入力すると、AIモデルが判定した「正解記事との意味的な近さ（1位〜20,000位）」が返ってきます。</li>
-          <li><strong>外すごとにヒントが自動開放</strong>:
+          <li><strong>正解との距離（0で正解！）を判定</strong>: 単語を入力すると、AIモデルが算出した「正解記事との意味的な距離」が返ってきます。<strong>距離が「0」になれば正解・クリアです！</strong></li>
+          <li><strong>3回目の挑戦からヒントが順次開放</strong>:
             <ul style="margin: 4px 0 0 16px; font-size: 0.8rem; color: #cbd5e1;">
-              <li>1回外し: 🏷️ カテゴリ</li>
-              <li>2回外し: 🔤 文字数（文字版なら2文目）</li>
-              <li>3回外し: 📑 目次構成</li>
-              <li>4回外し: 📝 冒頭の伏せ字抜粋（文字版なら3文目）</li>
-              <li>5回外し: 💡 頭文字（ラストチャンス）</li>
+              <li>3回目（2回ミス）: 🏷️ カテゴリ（文字版は第2文）</li>
+              <li>4回目（3回ミス）: 🔤 文字数</li>
+              <li>5回目（4回ミス）: 📑 目次構成（文字版は第3文）</li>
+              <li>6回目（5回ミス）: 💡 最初の1文字 ＆ 📝 導入部（ラストチャンス）</li>
             </ul>
           </li>
-          <li><strong>6回以内に1位を的中させよう！</strong>: 辞書にない単語は回数を消費しません。</li>
+          <li><strong>6回以内に距離0を的中させよう！</strong>: 辞書にない単語は回数を消費しません。</li>
         </ol>
         <div class="rank-legend">
-          <div class="legend-row"><span class="legend-dot rank-top"></span> <strong>1位</strong>: 正解！🎯</div>
-          <div class="legend-row"><span class="legend-dot rank-hot"></span> <strong>2〜100位</strong>: 非常に近い 🔥</div>
-          <div class="legend-row"><span class="legend-dot rank-warm"></span> <strong>101〜500位</strong>: かなり近い ✨</div>
-          <div class="legend-row"><span class="legend-dot rank-mid"></span> <strong>501〜2,000位</strong>: 関連あり 💡</div>
-          <div class="legend-row"><span class="legend-dot rank-cold"></span> <strong>2,001位〜</strong>: 遠い ❄️</div>
+          <div class="legend-row"><span class="legend-dot rank-top"></span> <strong>距離 0</strong>: 正解！🎯</div>
+          <div class="legend-row"><span class="legend-dot rank-hot"></span> <strong>距離 1〜99</strong>: 非常に近い 🔥</div>
+          <div class="legend-row"><span class="legend-dot rank-warm"></span> <strong>距離 100〜499</strong>: かなり近い ✨</div>
+          <div class="legend-row"><span class="legend-dot rank-mid"></span> <strong>距離 500〜1,999</strong>: 関連あり 💡</div>
+          <div class="legend-row"><span class="legend-dot rank-cool"></span> <strong>距離 2,000〜4,999</strong>: やや遠い 🟠</div>
+          <div class="legend-row"><span class="legend-dot rank-cold"></span> <strong>距離 5,000〜</strong>: 遠い ❄️</div>
         </div>
       </div>
     </div>
