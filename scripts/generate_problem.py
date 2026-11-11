@@ -3,7 +3,7 @@
 WikiLens バッチ問題生成スクリプト
 - MediaWiki API から記事情報・代表画像（画像版）または冒頭文（文字版）を取得
 - 画像がある記事は「画像版」、ない記事（孤独・記憶・意識・愛等）は「文字版」として生成
-- intfloat/multilingual-e5-small を用いて日本語頻出語彙（約20,000語）とのセマンティック類似度を計算
+- intfloat/multilingual-e5-small を用いて日本語頻出語彙（約100,000語）とのセマンティック類似度を計算
 - 静的配信用の JSON データ (/data/YYYY-MM-DD.json) と一覧 (/data/manifest.json) を出力
 """
 
@@ -59,12 +59,13 @@ STOPWORDS = {
     "自分", "自体", "自身", "ほか", "ため", "ゆえ", "もと", "うえ", "した",
 }
 
-# メンテナンス系カテゴリの除外パターン
+# メンテナンス系・メタ系カテゴリの除外パターン
 HIDDEN_CAT_PATTERNS = [
     r"スタブ", r"ウィキデータ", r"良質な記事", r"秀逸な記事", r"出典", r"検証",
     r"独自研究", r"リンク切れ", r"曖昧さ回避", r"一覧", r"記事", r"ページ",
     r"テンプレート", r"カテゴリ", r"画像", r"座標", r"識別子", r"典拠管理",
     r"ISBN", r"ISSN", r"LCCN", r"NDL", r"VIAF", r"Commons", r"コモンズ",
+    r"和製漢語", r"名数", r"語句", r"用語", r"言葉",
 ]
 
 
@@ -75,8 +76,11 @@ def normalize_word(word: str) -> str:
 
 def is_valid_japanese_vocab(word: str, strict_freq: bool = False) -> bool:
     """ゲーム用の語彙として適切かどうかを判定する"""
-    if not word or len(word) < 2 or len(word) > 10:
+    if not word or len(word) > 12:
         return False
+    if len(word) == 1:
+        # 1文字語は「心・脳・法・悪・秒・愛・夢・光・音・死・生・神・美」などの漢字1字の名詞を収録
+        return bool(re.fullmatch(r"[一-龥]", word)) and word not in STOPWORDS and get_ja_freq(word) >= 1e-6
     if word in STOPWORDS:
         return False
     if re.search(r"[0-9０-９!！?？\(\)（）\[\]「」『』【】/:：;；,、.。・\s　\"'~〜\-_＝=＋+＆&]", word):
@@ -84,12 +88,13 @@ def is_valid_japanese_vocab(word: str, strict_freq: bool = False) -> bool:
     if re.fullmatch(r"[a-zA-Z]+", word):
         return False
     if re.fullmatch(r"[ぁ-ん]{2}", word):
-        return False
+        if get_ja_freq(word) < 3e-6:
+            return False
     if re.fullmatch(r"[ァ-ヴー]{2}", word):
-        if get_ja_freq(word) < 1.2e-5:
+        if get_ja_freq(word) < 3e-6:
             return False
     if re.search(
-        r"(ました|ません|ている|ていた|ており|された|される|として|について|による|において|における|から|まで|だけ|など|くらい|ばかり|ながら|けれど|なかった|なければ|といった|という|といった)$",
+        r"(ました|ません|ている|ていた|ており|された|される|として|について|による|において|における|から|まで|だけ|など|くらい|ばかり|ながら|けれど|なかった|なければ|といった|という)$",
         word,
     ):
         return False
@@ -102,18 +107,19 @@ def is_valid_japanese_vocab(word: str, strict_freq: bool = False) -> bool:
     return True
 
 
-def build_base_vocabulary(target_size: int = 20000) -> list[str]:
-    """wordfreq の日本語頻出語からクリーンな語彙リストを構築してキャッシュする"""
+def build_base_vocabulary(target_size: int = 100000) -> list[str]:
+    """wordfreq の日本語頻出語からクリーンな語彙リスト（デフォルト100,000語）を構築してキャッシュする"""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    vocab_cache_file = CACHE_DIR / f"base_vocab_v2_{target_size}.json"
+    vocab_cache_file = CACHE_DIR / f"base_vocab_v4_{target_size}.json"
     if vocab_cache_file.exists():
         return json.loads(vocab_cache_file.read_text(encoding="utf-8"))
 
-    print("ベース語彙プールを構築中...")
-    raw_words = top_n_list("ja", 150000)
+    print(f"ベース語彙プール ({target_size} 語) を構築中...")
+    raw_words = top_n_list("ja", 300000)
     clean_words: list[str] = []
     seen: set[str] = set()
 
+    # 第1パス: 厳密な日本語語彙フィルタ
     for w in raw_words:
         nw = normalize_word(w)
         if nw in seen:
@@ -123,6 +129,18 @@ def build_base_vocabulary(target_size: int = 20000) -> list[str]:
             clean_words.append(nw)
             if len(clean_words) >= target_size:
                 break
+
+    # 第2パス: target_size に満たない場合、日本語文字（漢字・かな）を含む一般語彙で100,000語まで補完
+    if len(clean_words) < target_size:
+        for w in raw_words:
+            nw = normalize_word(w)
+            if nw in seen or nw in STOPWORDS or not nw or len(nw) > 15:
+                continue
+            if re.search(r"[一-龥ぁ-んァ-ヴー]", nw) and not re.search(r"[!！?？\(\)（）\[\]「」『』【】/:：;；,、.。\s　\"']", nw):
+                seen.add(nw)
+                clean_words.append(nw)
+                if len(clean_words) >= target_size:
+                    break
 
     vocab_cache_file.write_text(json.dumps(clean_words, ensure_ascii=False), encoding="utf-8")
     print(f"ベース語彙プール構築完了: {len(clean_words)} 語")
@@ -145,7 +163,7 @@ def mask_sentence_text(sentence: str, target: str, aliases: list[str], hard_noun
     # 正解・別名の伏せ字化
     terms = sorted(set([target] + aliases), key=len, reverse=True)
     for t in terms:
-        if len(t) >= 2:
+        if len(t) >= 2 or t == target:  # 「運」のような1文字の答えも伏せる
             masked = re.sub(re.escape(t), "█" * len(t), masked, flags=re.IGNORECASE)
     # 冒頭の読み仮名カッコなどを伏せ字化
     masked = re.sub(r"（[^）]{1,45}）", "（…）", masked, count=1)
@@ -377,6 +395,21 @@ def download_and_anonymize_image(thumb_url: str, problem_id: str, images_dir: Pa
     return f"./data/images/{local_filename}"
 
 
+def filter_aliases(target: str, aliases: list[str]) -> list[str]:
+    """
+    正解扱いにする別名を絞り込む。
+    答えを含む別の言葉（運→不運・幸運、記憶→長期記憶、正義→正義感）は意味が違うので正解にしない。
+    """
+    kept = []
+    for a in aliases:
+        if not a or a == target:
+            continue
+        if target in a and len(a) > len(target):
+            continue
+        kept.append(a)
+    return kept
+
+
 def create_masked_summary(extract: str, target: str, aliases: list[str]) -> str:
     """導入部の最初の2文から正解ワードと別名を伏せ字（███）にしたヒント文を生成する"""
     sentences = [s.strip() for s in extract.replace("\n", "").split("。") if s.strip()]
@@ -384,7 +417,7 @@ def create_masked_summary(extract: str, target: str, aliases: list[str]) -> str:
     masked = snippet
     terms = sorted(set([target] + aliases), key=len, reverse=True)
     for t in terms:
-        if len(t) >= 2:
+        if len(t) >= 2 or t == target:  # 「運」のような1文字の答えも伏せる
             masked = re.sub(re.escape(t), "█" * len(t), masked, flags=re.IGNORECASE)
     masked = re.sub(r"（[^）]{1,45}）", "（…）", masked, count=1)
     if len(masked) > 180:
@@ -397,7 +430,7 @@ def compute_rankings(
     base_vocab: list[str],
     base_embeddings: np.ndarray,
     article_info: dict[str, Any],
-    max_words: int = 20000,
+    max_words: int = 100000,
 ) -> list[str]:
     """
     セマンティック距離推測のランキング計算:
@@ -415,8 +448,9 @@ def compute_rankings(
     linked_set = set(article_info["linked_words"])
 
     base_set = set(base_vocab)
+    must_include = ["心", "脳", "法", "悪", "秒", "一人", "愛", "夢", "光", "音", "死", "生", "神", "美", "くじ", "天秤", "クローバー"]
     extra_words = [
-        w for w in article_info["linked_words"]
+        w for w in (must_include + article_info["linked_words"])
         if w not in base_set and w != target and w != canonical
     ][:600]
 
@@ -459,6 +493,10 @@ def compute_rankings(
         elif in_link:
             scores[idx] += 0.022
 
+        # ターゲット文字列を含む複合語（例: 記憶→長期記憶・記憶障害）が上位を独占しすぎないよう調整
+        if len(w) > len(target) and target in w:
+            scores[idx] -= 0.035
+
         # ターゲット文字列の一部を含むだけの表層断片ノイズを抑制
         if len(w) <= 3 and w in target and not in_link and not in_intro:
             scores[idx] -= 0.06
@@ -478,10 +516,64 @@ def compute_rankings(
     return ranked_words
 
 
+def extract_related_hint_words(
+    ranked_words: list[str],
+    target: str,
+    aliases: list[str],
+    linked_words: list[str] | None = None,
+    count: int = 4,
+) -> list[str]:
+    """
+    ヒント表示用に、答えの文字（漢字・かな）を1文字も含まない上位の連想ワード（名詞）を抽出する。
+    記事内部リンク語（linked_words）に含まれる関連概念を優先し、動詞・副詞・メタ語を除外する。
+    """
+    alias_set = {a.lower() for a in aliases}
+    target_chars = set(target)
+    linked_set = set(linked_words or [])
+    weak_meta = {
+        "概念", "テーマ", "分野", "意味", "研究", "理論", "学問", "対象", "性質", "現象",
+        "関係", "構造", "体系", "一般", "基礎", "基本", "ものの", "人々", "感じ", "状況",
+        "公的", "公約", "公社", "公言", "理学", "科学", "考察", "機能", "物体", "動物",
+    }
+
+    def is_good_hint_noun(w: str) -> bool:
+        if w.lower() in alias_set or w in STOPWORDS or w in weak_meta:
+            return False
+        if target in w or w in target:
+            return False
+        if any(ch in w for ch in target_chars):
+            return False
+        if len(w) < 1 or len(w) > 6:
+            return False
+        # ひらがなのみで終わる動詞・形容詞・副詞っぽい語を除外
+        if re.search(r"[ぁ-ん]$", w) and not re.search(r"(さ|み|き|り|め|ち|て)$", w):
+            return False
+        if w.endswith(("く", "ぐ", "す", "つ", "ぬ", "ぶ", "む", "る", "う", "い", "な", "に", "と", "で")):
+            return False
+        return True
+
+    result: list[str] = []
+    # 第1優先: 上位500語のうち、記事内リンクにも存在する確かな関連名詞
+    for w in ranked_words[1:500]:
+        if w in linked_set and is_good_hint_noun(w):
+            result.append(w)
+            if len(result) >= count:
+                return result
+
+    # 第2優先: 上位300語から条件を満たす名詞を補完
+    for w in ranked_words[1:300]:
+        if w not in result and is_good_hint_noun(w):
+            result.append(w)
+            if len(result) >= count:
+                break
+
+    return result
+
+
 def get_base_embeddings(model: SentenceTransformer, base_vocab: list[str]) -> np.ndarray:
     """ベース語彙の埋め込みベクトルを計算またはキャッシュから読み込む"""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    emb_cache_file = CACHE_DIR / f"base_embs_v2_e5_small_{len(base_vocab)}.npy"
+    emb_cache_file = CACHE_DIR / f"base_embs_v3_e5_small_{len(base_vocab)}.npy"
     if emb_cache_file.exists():
         print("キャッシュ済み語彙ベクトルを読み込み中...")
         return np.load(emb_cache_file)
@@ -509,7 +601,7 @@ def generate_problem(
     force_mode: str = "auto",
     custom_caption: str | None = None,
     out_dir: Path | None = None,
-    max_words: int = 20000,
+    max_words: int = 100000,
 ) -> dict[str, Any]:
     """1問分の問題データJSON（および画像版なら画像）を生成する"""
     dest_dir = out_dir or DATA_DIR
@@ -534,7 +626,7 @@ def generate_problem(
             "license_url": info["image_meta"]["license_url"],
         }
 
-    aliases = list(dict.fromkeys((extra_aliases or []) + info["redirects"]))
+    aliases = filter_aliases(info["title"], list(dict.fromkeys((extra_aliases or []) + info["redirects"])))
     ranked_words = compute_rankings(
         model,
         base_vocab,
@@ -544,9 +636,14 @@ def generate_problem(
     )
 
     masked_summary = create_masked_summary(info["extract"], info["title"], aliases)
-    clean_cats = [c for c in info["categories"] if c != "〇〇" and "行" not in c][:5]
+    clean_cats = [
+        c for c in info["categories"]
+        if c != "〇〇" and "行" not in c and not any(re.search(pat, c) for pat in HIDDEN_CAT_PATTERNS)
+    ][:5]
     if not clean_cats:
         clean_cats = ["哲学・科学の概念"]
+
+    related_words = extract_related_hint_words(ranked_words, info["title"], aliases, info.get("linked_words"), count=4)
 
     problem_data = {
         "id": problem_id,
@@ -564,6 +661,7 @@ def generate_problem(
             "first_char": info["title"][0] if info["title"] else "",
             "char_length": len(info["title"]),
             "masked_summary": masked_summary,
+            "related_words": related_words,
         },
         "words": ranked_words,
     }
@@ -571,8 +669,170 @@ def generate_problem(
     out_path = dest_dir / f"{problem_id}.json"
     out_path.write_text(json.dumps(problem_data, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     size_kb = out_path.stat().st_size / 1024
-    print(f"[{problem_id}] 生成完了 [{mode}版] -> {out_path.name} ({size_kb:.1f} KB), 上位10語: {ranked_words[:10]}")
+    print(f"[{problem_id}] 生成完了 [{mode}版] -> {out_path.name} ({size_kb:.1f} KB), 上位10語: {ranked_words[:10]}, ヒント関連語: {related_words}")
     return problem_data
+
+
+# 自動補充用の厳選・抽象概念＆象徴モチーフ記事プール
+REFILL_CANDIDATES: list[tuple[str, list[str], str]] = [
+    ("自由", ["じゆう", "フリーダム", "リバティ"], "auto"),
+    ("幸福", ["こうふく", "しあわせ", "ハピネス"], "auto"),
+    ("愛", ["あい", "ラブ"], "auto"),
+    ("夢", ["ゆめ", "ドリーム"], "auto"),
+    ("美", ["び", "うつくしさ", "ビューティー"], "auto"),
+    ("真理", ["しんり", "トゥルース"], "auto"),
+    ("知識", ["ちしき", "ナレッジ"], "auto"),
+    ("生命", ["せいめい", "いのち", "ライフ"], "auto"),
+    ("文明", ["ぶんめい", "シヴィライゼーション"], "auto"),
+    ("平和", ["へいわ", "ピース"], "auto"),
+    ("希望", ["きぼう", "ホープ"], "auto"),
+    ("恐怖", ["きょうふ", "おそれ"], "auto"),
+    ("信頼", ["しんらい", "トラスト"], "auto"),
+    ("言語", ["げんご", "ことば"], "auto"),
+    ("音楽", ["おんがく", "ミュージック"], "auto"),
+    ("芸術", ["げいじゅつ", "アート"], "auto"),
+    ("科学", ["かがく", "サイエンス"], "auto"),
+    ("歴史", ["れきし", "ヒストリー"], "auto"),
+    ("未来", ["みらい", "フューチャー"], "auto"),
+    ("空間", ["くうかん", "スペース"], "auto"),
+    ("光", ["ひかり", "ライト"], "auto"),
+    ("影", ["かげ", "シャドウ"], "auto"),
+    ("熱", ["ねつ", "ヒート"], "auto"),
+    ("音", ["おと", "サウンド"], "auto"),
+    ("色", ["いろ", "色彩", "カラー"], "auto"),
+    ("無限", ["むげん", "インフィニティ"], "auto"),
+    ("秩序", ["ちつじょ", "オーダー"], "auto"),
+    ("混沌", ["こんとん", "カオス"], "auto"),
+    ("運命", ["うんめい", "宿命"], "auto"),
+    ("偶然", ["ぐうぜん", "チャンス"], "auto"),
+    ("直観", ["ちょっかん", "インスピレーション"], "auto"),
+    ("想像力", ["そうぞうりょく", "イマジネーション"], "auto"),
+    ("共感", ["きょうかん", "エンパシー"], "auto"),
+    ("勇気", ["ゆうき", "カレッジ"], "auto"),
+    ("欲望", ["よくぼう", "デザイア"], "auto"),
+    ("道徳", ["どうとく", "モラル"], "auto"),
+    ("権力", ["けんりょく", "パワー"], "auto"),
+    ("貨幣", ["かへい", "おかね", "マネー"], "auto"),
+    ("労働", ["ろうどう", "ワーク"], "auto"),
+    ("遊び", ["あそび", "遊戯", "プレイ"], "auto"),
+    ("沈黙", ["ちんもく", "サイレンス"], "auto"),
+    ("秘密", ["ひみつ", "シークレット"], "auto"),
+]
+
+
+CURATED_RELATED_HINTS: dict[str, list[str]] = {
+    "運": ["占い", "努力", "偶然", "神社"],
+    "情報": ["知識", "通信", "データ", "メディア"],
+    "感情": ["気持ち", "喜び", "心理", "悲しみ"],
+    "意識": ["認知", "心理学", "覚醒", "脳"],
+    "正義": ["道徳", "倫理", "法律", "権利"],
+    "思考": ["哲学", "推理", "判断", "知性"],
+    "孤独": ["寂しさ", "心情", "人間関係", "社会"],
+    "重力": ["宇宙", "地球", "質量", "引力"],
+    "記憶": ["学習", "思い出", "忘却", "脳"],
+    "時間": ["時計", "空間", "世紀", "秒"],
+}
+
+
+def rerank_existing_problems(
+    model: SentenceTransformer,
+    base_vocab: list[str],
+    base_embeddings: np.ndarray,
+    max_words: int = 100000,
+) -> list[dict[str, Any]]:
+    """data/ 内の既存問題JSONを100,000語辞書＆新ヒント仕様で再計算し、最新日付（本日まで）に更新する"""
+    import datetime
+    import shutil
+
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    today_date = datetime.datetime.now(jst).date()
+    old_files = sorted(DATA_DIR.glob("2026-*.json"))
+    start_date = today_date - datetime.timedelta(days=len(old_files) - 1)
+    images_dir = DATA_DIR / "images"
+
+    updated = []
+    loaded_items = []
+    for idx, jf in enumerate(old_files):
+        d = json.loads(jf.read_text(encoding="utf-8"))
+        new_id = (start_date + datetime.timedelta(days=idx)).isoformat()
+        loaded_items.append((jf, d, new_id))
+
+    for jf, d, new_id in loaded_items:
+        old_id = d["id"]
+        target = d["target"]
+        raw_sents = d.get("text_puzzle", {}).get("raw_sentences", [])
+        try:
+            wiki_info = fetch_wikipedia_article(target, force_mode=d.get("mode", "auto"))
+            extract = wiki_info["extract"]
+            body_extract = wiki_info["body_extract"]
+            linked_words = wiki_info["linked_words"]
+            raw_cats = wiki_info["categories"]
+        except Exception:
+            extract = "".join(raw_sents) or d.get("image", {}).get("caption", "") or target
+            body_extract = extract
+            linked_words = [w for w in d.get("words", [])[1:600] if w != target]
+            raw_cats = d.get("hints", {}).get("category", [])
+
+        aliases = filter_aliases(target, d.get("aliases", []))
+        clean_cats = [
+            c for c in raw_cats
+            if c != "〇〇" and "行" not in c and not any(re.search(pat, c) for pat in HIDDEN_CAT_PATTERNS)
+        ][:5]
+        if not clean_cats:
+            clean_cats = ["哲学・科学の概念"]
+
+        curated_hints = CURATED_RELATED_HINTS.get(target, [])
+        info = {
+            "title": target,
+            "canonical_title": target,
+            "extract": extract,
+            "body_extract": body_extract,
+            "categories": clean_cats,
+            "linked_words": list(dict.fromkeys(curated_hints + linked_words)),
+        }
+        ranked_words = compute_rankings(model, base_vocab, base_embeddings, info, max_words=max_words)
+        related_words = curated_hints or extract_related_hint_words(ranked_words, target, aliases, linked_words, count=4)
+
+        if raw_sents:
+            d["text_puzzle"] = {
+                "sentence_1": mask_sentence_text(raw_sents[0], target, aliases),
+                "sentence_2": mask_sentence_text(raw_sents[1], target, aliases) if len(raw_sents) > 1 else "",
+                "sentence_3": mask_sentence_text(raw_sents[2], target, aliases) if len(raw_sents) > 2 else "",
+                "sentence_4": mask_sentence_text(raw_sents[3], target, aliases) if len(raw_sents) > 3 else "",
+                "raw_sentences": raw_sents[:4],
+            }
+
+        if d.get("image") and d["image"].get("url"):
+            old_img = images_dir / f"{old_id}.jpg"
+            new_img = images_dir / f"{new_id}.jpg"
+            if old_img.exists() and old_img != new_img:
+                shutil.move(str(old_img), str(new_img))
+            d["image"]["url"] = f"./data/images/{new_id}.jpg"
+
+        masked_summary = create_masked_summary(extract, target, aliases)
+        d["id"] = new_id
+        d["aliases"] = aliases
+        d["total_words"] = len(ranked_words)
+        d["hints"]["category"] = clean_cats
+        d["hints"]["char_length"] = len(target)
+        d["hints"]["first_char"] = target[0] if target else ""
+        d["hints"]["masked_summary"] = masked_summary
+        d["hints"]["related_words"] = related_words
+        d["words"] = ranked_words
+
+        new_jf = DATA_DIR / f"{new_id}.json"
+        new_jf.write_text(json.dumps(d, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        if jf.exists() and jf != new_jf:
+            jf.unlink()
+        size_kb = new_jf.stat().st_size / 1024
+        print(f"[再計算完了] {old_id} -> {new_id} ({target}): {len(ranked_words)} 語 ({size_kb:.1f} KB) | 関連ヒント語: {related_words}")
+        updated.append(d)
+
+    # manifest.json を新しい日付一覧でクリーンに書き直す
+    manifest_path = DATA_DIR / "manifest.json"
+    if manifest_path.exists():
+        manifest_path.unlink()
+    return updated
 
 
 def update_manifest(problems_meta: list[dict[str, Any]], manifest_dir: Path | None = None) -> None:
@@ -605,6 +865,71 @@ def update_manifest(problems_meta: list[dict[str, Any]], manifest_dir: Path | No
     print(f"マニフェスト更新完了: {len(sorted_list)} 問収録")
 
 
+def refill_problems(
+    model: SentenceTransformer,
+    base_vocab: list[str],
+    base_embeddings: np.ndarray,
+    days: int = 10,
+    max_words: int = 100000,
+) -> list[dict[str, Any]]:
+    """
+    data/ と queue/ にまだ存在しない候補概念を選び、
+    最新日付の翌日から days 日分の問題を queue/ に自動補充する。
+    """
+    import datetime
+
+    QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+    used_targets: set[str] = set()
+    all_dates: list[str] = []
+
+    for d_dir in [DATA_DIR, QUEUE_DIR]:
+        if not d_dir.exists():
+            continue
+        for jf in d_dir.glob("2026-*.json"):
+            all_dates.append(jf.stem)
+            try:
+                jd = json.loads(jf.read_text(encoding="utf-8"))
+                if jd.get("target"):
+                    used_targets.add(jd["target"])
+            except Exception:
+                pass
+
+    jst = datetime.timezone(datetime.timedelta(hours=9))
+    today_date = datetime.datetime.now(jst).date()
+
+    if all_dates:
+        latest_date = datetime.date.fromisoformat(max(all_dates))
+        start_date = max(latest_date + datetime.timedelta(days=1), today_date)
+    else:
+        start_date = today_date
+
+    available = [c for c in REFILL_CANDIDATES if c[0] not in used_targets]
+    created: list[dict[str, Any]] = []
+
+    for i in range(min(days, len(available))):
+        target_date = (start_date + datetime.timedelta(days=i)).isoformat()
+        title, aliases, mode_req = available[i]
+        dest = DATA_DIR if target_date <= today_date.isoformat() else QUEUE_DIR
+        try:
+            p = generate_problem(
+                target_date,
+                title,
+                model,
+                base_vocab,
+                base_embeddings,
+                extra_aliases=aliases,
+                force_mode=mode_req,
+                out_dir=dest,
+                max_words=max_words,
+            )
+            created.append(p)
+            time.sleep(0.3)
+        except Exception as e:
+            print(f"[補充エラー] {target_date} ({title}): {e}")
+
+    return created
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="WikiLens 問題データ生成スクリプト")
     parser.add_argument("--date", type=str, help="問題ID (YYYY-MM-DD)")
@@ -613,7 +938,10 @@ def main() -> None:
     parser.add_argument("--mode", type=str, default="auto", choices=["auto", "image", "text"], help="画像版か文字版か")
     parser.add_argument("--preset", action="store_true", help="初期収録用の10問（画像版＋文字版の混合）を一括生成する")
     parser.add_argument("--out-dir", type=str, default="", help="出力先ディレクトリ（デフォルト: data/）")
-    parser.add_argument("--vocab-size", type=int, default=20000, help="収録語彙数 (デフォルト: 20000)")
+    parser.add_argument("--vocab-size", type=int, default=100000, help="収録語彙数 (デフォルト: 100000)")
+    parser.add_argument("--rerank-existing", action="store_true", help="data/ にある既存の問題の距離データだけを、今の辞書で作り直す（画像・出題文はそのまま）")
+    parser.add_argument("--refill", action="store_true", help="候補プールから次のN日分を queue/ に自動補充する")
+    parser.add_argument("--days", type=int, default=10, help="--refill 時の生成日数 (デフォルト: 10)")
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir) if args.out_dir else DATA_DIR
@@ -624,7 +952,17 @@ def main() -> None:
     base_embeddings = get_base_embeddings(model, base_vocab)
 
     generated = []
-    if args.preset:
+    if args.rerank_existing:
+        generated = rerank_existing_problems(model, base_vocab, base_embeddings, max_words=args.vocab_size)
+        update_manifest(generated, manifest_dir=DATA_DIR)
+        return
+    elif args.refill:
+        refilled = refill_problems(model, base_vocab, base_embeddings, days=args.days, max_words=args.vocab_size)
+        public_items = [p for p in refilled if (DATA_DIR / f"{p['id']}.json").exists()]
+        if public_items:
+            update_manifest(public_items, manifest_dir=DATA_DIR)
+        return
+    elif args.preset:
         # 画像版（象徴的な画像がある概念）と文字版（画像がない・抽象度の高い概念）をバランスよく混合
         presets = [
             # 10/23 (今日): 時間 (画像版: 懐中時計)

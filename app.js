@@ -11,7 +11,7 @@
 (() => {
   "use strict";
 
-  const STORAGE_PREFIX = "wikilens_state_v4_";
+  const STORAGE_PREFIX = "wikilens_state_v5_";
   const MAX_TRIES = 6;
 
   // アプリケーション状態
@@ -33,6 +33,7 @@
     problemSelect: document.getElementById("problem-select"),
     problemBadge: document.getElementById("problem-badge"),
     modeBadge: document.getElementById("mode-badge"),
+    charLenBadge: document.getElementById("char-len-badge"),
     vocabCountBadge: document.getElementById("vocab-count-badge"),
     imageFrame: document.getElementById("image-frame"),
     imageSkeleton: document.getElementById("image-skeleton"),
@@ -160,7 +161,7 @@
    * rank 2 -> distance 1
    */
   function getRankVisuals(rank, totalWords) {
-    const total = totalWords || 20000;
+    const total = totalWords || 100000;
     const distance = Math.max(0, rank - 1);
 
     if (distance === 0) {
@@ -174,32 +175,32 @@
         shortLabel: "距離 0",
       };
     }
-    if (distance <= 99) {
-      const pct = Math.max(82, 99 - (distance / 99) * 17);
+    if (distance <= 200) {
+      const pct = Math.max(82, 99 - (distance / 200) * 17);
       return {
         distance,
         tier: "tier-hot",
         widthPct: pct,
         emoji: "🔥",
         colorEmoji: "🟩",
-        label: `距離 ${distance} 🔥`,
-        shortLabel: `距離 ${distance}`,
+        label: `距離 ${distance.toLocaleString()} 🔥`,
+        shortLabel: `距離 ${distance.toLocaleString()}`,
       };
     }
-    if (distance <= 499) {
-      const pct = Math.max(62, 82 - ((distance - 100) / 400) * 20);
+    if (distance <= 1500) {
+      const pct = Math.max(62, 82 - ((distance - 200) / 1300) * 20);
       return {
         distance,
         tier: "tier-warm",
         widthPct: pct,
         emoji: "✨",
         colorEmoji: "🟦",
-        label: `距離 ${distance} ✨`,
-        shortLabel: `距離 ${distance}`,
+        label: `距離 ${distance.toLocaleString()} ✨`,
+        shortLabel: `距離 ${distance.toLocaleString()}`,
       };
     }
-    if (distance <= 1999) {
-      const pct = Math.max(38, 62 - ((distance - 500) / 1500) * 24);
+    if (distance <= 6000) {
+      const pct = Math.max(38, 62 - ((distance - 1500) / 4500) * 24);
       return {
         distance,
         tier: "tier-mid",
@@ -210,8 +211,8 @@
         shortLabel: `距離 ${distance.toLocaleString()}`,
       };
     }
-    if (distance <= 4999) {
-      const pct = Math.max(18, 38 - ((distance - 2000) / 3000) * 20);
+    if (distance <= 20000) {
+      const pct = Math.max(18, 38 - ((distance - 6000) / 14000) * 20);
       return {
         distance,
         tier: "tier-cool",
@@ -222,7 +223,7 @@
         shortLabel: `距離 ${distance.toLocaleString()}`,
       };
     }
-    const pct = Math.max(5, 18 - ((distance - 5000) / Math.max(1, total - 5000)) * 13);
+    const pct = Math.max(5, 18 - ((distance - 20000) / Math.max(1, total - 20000)) * 13);
     return {
       distance,
       tier: "tier-cold",
@@ -398,14 +399,14 @@
         ? escapeHtml(tp.raw_sentences?.[0] || tp.sentence_1)
         : escapeHtml(tp.sentence_1);
 
-      if (missesCount >= 2 || isFinished) {
+      if (missesCount >= 3 || isFinished) {
         el.textSentence2.className = "text-sentence active";
         el.textSentence2.innerHTML = isFinished
           ? escapeHtml(tp.raw_sentences?.[1] || tp.sentence_2)
           : escapeHtml(tp.sentence_2 || "（2文目なし）");
       } else {
         el.textSentence2.className = "text-sentence locked";
-        el.textSentence2.innerHTML = `<span class="sentence-lock-tag">🔒 2回外すと開放（第2文）</span>`;
+        el.textSentence2.innerHTML = `<span class="sentence-lock-tag">🔒 3回外すと開放（第2文）</span>`;
       }
 
       if (missesCount >= 4 || isFinished) {
@@ -460,25 +461,20 @@
   }
 
   /**
-   * 段階的ヒントタイムラインの描画（全4段階）
-   * 挑戦回数 1〜2回目 (0〜1回ミス): ヒントなし（自力挑戦）
-   * 挑戦回数 3回目 (2回ミス): ヒント 1 (🏷️ 所属カテゴリ)
-   * 挑戦回数 4回目 (3回ミス): ヒント 2 (🔤 記事名の文字数)
-   * 挑戦回数 5回目 (4回ミス): ヒント 3 (📑 目次セクション構成)
-   * 挑戦回数 6回目 (5回ミス): ヒント 4 (💡 最初の1文字 ＆ 📝 導入部伏せ字抜粋)
+   * 段階的ヒントタイムラインの描画（後半3回で開放される全3段階）
+   * 挑戦回数 1〜3回目 (0〜2回ミス): ヒントなし（自力連想ゾーン）
+   * 挑戦回数 4回目 (3回ミス): ヒント 1 (🏷️ 分野カテゴリ ＆ 📑 目次テーマ)
+   * 挑戦回数 5回目 (4回ミス): ヒント 2 (🔥 答えに非常に近い関連ワード＋距離)
+   * 挑戦回数 6回目 (5回ミス): ヒント 3 (💡 最初の1文字 ＆ 📝 導入部伏せ字抜粋)
    */
   function renderHintsTimeline(missesCount, isFinished) {
     const h = state.problem.hints || {};
     let unlockedCount = 0;
-    if (isFinished) {
-      unlockedCount = 4;
-    } else if (missesCount >= 5) {
-      unlockedCount = 4;
-    } else if (missesCount >= 4) {
+    if (isFinished || missesCount >= 5) {
       unlockedCount = 3;
-    } else if (missesCount >= 3) {
+    } else if (missesCount >= 4) {
       unlockedCount = 2;
-    } else if (missesCount >= 2) {
+    } else if (missesCount >= 3) {
       unlockedCount = 1;
     } else {
       unlockedCount = 0;
@@ -487,50 +483,67 @@
     el.unlockedHintsCount.textContent = String(unlockedCount);
     el.hintEmptyState.classList.toggle("hidden", unlockedCount > 0);
 
-    // ヒント1: カテゴリ (3回目挑戦時 / 2個入力後)
-    if (missesCount >= 2 || isFinished) {
+    // ヒント1: 分野カテゴリ & 目次テーマ (4回目挑戦時 / 3回ミス)
+    if (missesCount >= 3 || isFinished) {
       el.hintItem1.classList.remove("hidden");
       const cats = Array.isArray(h.category) && h.category.length > 0
         ? h.category.map((c) => `<span class="hint-tag">${escapeHtml(c)}</span>`).join("")
         : `<span class="hint-tag">一般概念</span>`;
-      el.hintItem1Body.innerHTML = `<div class="hint-tag-list">${cats}</div>`;
+      const secs = Array.isArray(h.sections) && h.sections.length > 0
+        ? h.sections.slice(0, 4).map((s) => `<span class="hint-tag">§ ${escapeHtml(s)}</span>`).join("")
+        : "";
+      el.hintItem1Body.innerHTML = `
+        <div class="hint-tag-list" style="margin-bottom: 6px;">${cats}</div>
+        ${secs ? `<div class="hint-tag-list">${secs}</div>` : ""}
+      `;
     } else {
       el.hintItem1.classList.add("hidden");
     }
 
-    // ヒント2: 文字数 (4回目挑戦時 / 3個入力後)
-    if (missesCount >= 3 || isFinished) {
+    // ヒント2: 答えに非常に近い関連ワード (5回目挑戦時 / 4回ミス)
+    if (missesCount >= 4 || isFinished) {
       el.hintItem2.classList.remove("hidden");
-      const len = h.char_length || state.problem.target.length;
-      el.hintItem2Body.innerHTML = `<strong>${len} 文字</strong> の日本語概念です。`;
+      let relWords = Array.isArray(h.related_words) ? h.related_words : [];
+      if (relWords.length === 0 && Array.isArray(state.problem.words)) {
+        const target = state.problem.target || "";
+        const targetChars = new Set(target.split(""));
+        for (const w of state.problem.words.slice(1, 250)) {
+          if (w && !w.includes(target) && ![...targetChars].some((c) => w.includes(c)) && !state.aliasSet.has(w)) {
+            relWords.push(w);
+            if (relWords.length >= 4) break;
+          }
+        }
+      }
+      const relHtml = relWords.slice(0, 4).map((w) => {
+        const r = state.rankMap.get(w);
+        const distStr = r ? ` (距離 ${r - 1})` : "";
+        return `<span class="hint-tag">🔥 ${escapeHtml(w)}${distStr}</span>`;
+      }).join("");
+      el.hintItem2Body.innerHTML = `
+        <div style="margin-bottom: 4px; font-size: 0.82rem; color: #cbd5e1;">正解のすぐ近くにある概念・言葉：</div>
+        <div class="hint-tag-list">${relHtml || "<span class='hint-tag'>データなし</span>"}</div>
+      `;
     } else {
       el.hintItem2.classList.add("hidden");
     }
 
-    // ヒント3: 目次セクション (5回目挑戦時 / 4個入力後)
-    if (missesCount >= 4 || isFinished) {
+    // ヒント3: 最初の1文字 & 冒頭伏せ字抜粋 (6回目挑戦時 / 5回ミス・ラストチャンス)
+    if (missesCount >= 5 || isFinished) {
       el.hintItem3.classList.remove("hidden");
-      const secs = Array.isArray(h.sections) && h.sections.length > 0
-        ? h.sections.map((s) => `<span class="hint-tag">§ ${escapeHtml(s)}</span>`).join("")
-        : `<span class="hint-tag">§ 概要</span>`;
-      el.hintItem3Body.innerHTML = `<div class="hint-tag-list">${secs}</div>`;
+      const ch = h.first_char || state.problem.target[0];
+      const len = h.char_length || state.problem.target.length;
+      const masked = h.masked_summary || "（データなし）";
+      el.hintItem3Body.innerHTML = `
+        <div style="margin-bottom: 8px;">記事名は「<strong>${escapeHtml(ch)}</strong>」から始まる <strong>${len}文字</strong> の言葉です！</div>
+        ${state.problem.mode !== "text" ? `<blockquote>${escapeHtml(masked)}</blockquote>` : ""}
+      `;
     } else {
       el.hintItem3.classList.add("hidden");
     }
 
-    // ヒント4: 頭文字 & 冒頭伏せ字抜粋 (6回目挑戦時 / 5個入力後・ラストチャンス)
-    if (missesCount >= 5 || isFinished) {
-      el.hintItem4.classList.remove("hidden");
-      const ch = h.first_char || state.problem.target[0];
-      const masked = h.masked_summary || "（データなし）";
-      el.hintItem4Body.innerHTML = `
-        <div style="margin-bottom: 8px;">記事名の最初の文字は「<strong>${escapeHtml(ch)}</strong>」です！</div>
-        <blockquote>${escapeHtml(masked)}</blockquote>
-      `;
-    } else {
+    if (el.hintItem4) {
       el.hintItem4.classList.add("hidden");
     }
-
     if (el.hintItem5) {
       el.hintItem5.classList.add("hidden");
     }
@@ -771,6 +784,10 @@
 
       el.problemBadge.textContent = `📅 問題: ${state.currentProblemId}`;
       el.modeBadge.textContent = mode === "text" ? "📝 文字版" : "🖼️ 画像版";
+      if (el.charLenBadge) {
+        const cLen = data.hints?.char_length || data.target?.length || "-";
+        el.charLenBadge.textContent = `🔤 答え: ${cLen}文字`;
+      }
       el.vocabCountBadge.textContent = `辞書: ${(data.total_words || state.rankMap.size).toLocaleString()}語`;
 
       if (mode === "image" && data.image) {
