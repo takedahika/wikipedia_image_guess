@@ -57,6 +57,15 @@
     triesRemainingLabel: document.getElementById("tries-remaining-label"),
     btnGiveup: document.getElementById("btn-giveup"),
     btnResultModal: document.getElementById("btn-result-modal"),
+    btnNextPill: document.getElementById("btn-next-pill"),
+    tabModeImage: document.getElementById("tab-mode-image"),
+    tabModeText: document.getElementById("tab-mode-text"),
+    tabCountImage: document.getElementById("tab-count-image"),
+    tabCountText: document.getElementById("tab-count-text"),
+    btnNextImageInline: document.getElementById("btn-next-image-inline"),
+    btnNextTextInline: document.getElementById("btn-next-text-inline"),
+    btnNextImageModal: document.getElementById("btn-next-image-modal"),
+    btnNextTextModal: document.getElementById("btn-next-text-modal"),
     guessForm: document.getElementById("guess-form"),
     guessInput: document.getElementById("guess-input"),
     btnSubmit: document.getElementById("btn-submit"),
@@ -286,6 +295,146 @@
     return "";
   }
 
+  function isProblemFinished(problemId) {
+    try {
+      const raw = localStorage.getItem(STORAGE_PREFIX + problemId);
+      if (!raw) return false;
+      const saved = JSON.parse(raw);
+      return Boolean(saved && (saved.cleared || saved.failed));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
+   * 指定モード（"image" | "text" | null）の次に遊ぶべき問題を取得
+   */
+  function getNextPlayableProblem(targetMode = null) {
+    const allProblems = state.manifest?.problems;
+    if (!Array.isArray(allProblems) || allProblems.length === 0) return null;
+
+    const filtered = targetMode
+      ? allProblems.filter((p) => (p.mode || "image") === targetMode)
+      : allProblems;
+    if (filtered.length === 0) return null;
+
+    const total = filtered.length;
+    const currentIdx = filtered.findIndex((p) => p.id === state.currentProblemId);
+
+    // 現在の問題がこのモードに含まれない場合は、先頭（最新）から未終了を探す
+    if (currentIdx === -1) {
+      for (let i = 0; i < total; i++) {
+        if (!isProblemFinished(filtered[i].id)) {
+          return { problem: filtered[i], num: total - i, isUnfinished: true };
+        }
+      }
+      return { problem: filtered[0], num: total, isUnfinished: false };
+    }
+
+    // 現在の問題から次の未終了問題を探す
+    for (let offset = 1; offset < total; offset++) {
+      const idx = (currentIdx + offset) % total;
+      const p = filtered[idx];
+      if (!isProblemFinished(p.id)) {
+        return { problem: p, num: total - idx, isUnfinished: true };
+      }
+    }
+
+    // 他の問題がすべて終了済みで、現在の問題が未終了なら現在の問題を返す
+    if (!isProblemFinished(filtered[currentIdx].id)) {
+      return { problem: filtered[currentIdx], num: total - currentIdx, isUnfinished: true };
+    }
+
+    const nextIdx = (currentIdx + 1) % total;
+    return { problem: filtered[nextIdx], num: total - nextIdx, isUnfinished: false };
+  }
+
+  function updateModeTabsAndNextButtons() {
+    const allProblems = state.manifest?.problems || [];
+    const imgProblems = allProblems.filter((p) => (p.mode || "image") === "image");
+    const txtProblems = allProblems.filter((p) => p.mode === "text");
+
+    const imgDone = imgProblems.filter((p) => isProblemFinished(p.id)).length;
+    const txtDone = txtProblems.filter((p) => isProblemFinished(p.id)).length;
+
+    const currentMode = state.problem?.mode || "image";
+    if (el.tabModeImage) {
+      el.tabModeImage.classList.toggle("active", currentMode === "image");
+    }
+    if (el.tabModeText) {
+      el.tabModeText.classList.toggle("active", currentMode === "text");
+    }
+    if (el.tabCountImage) {
+      el.tabCountImage.textContent = `${imgDone}/${imgProblems.length}問`;
+    }
+    if (el.tabCountText) {
+      el.tabCountText.textContent = `${txtDone}/${txtProblems.length}問`;
+    }
+
+    const nextImg = getNextPlayableProblem("image");
+    const nextTxt = getNextPlayableProblem("text");
+
+    const imgBtns = [el.btnNextImageInline, el.btnNextImageModal];
+    imgBtns.forEach((b) => {
+      if (!b) return;
+      if (!nextImg) {
+        b.classList.add("hidden");
+      } else {
+        b.classList.remove("hidden");
+        b.textContent = nextImg.isUnfinished
+          ? `🖼️ 次の画像版を遊ぶ (#${nextImg.num})`
+          : `🖼️ 画像版 (#${nextImg.num}・全問済)`;
+      }
+    });
+
+    const txtBtns = [el.btnNextTextInline, el.btnNextTextModal];
+    txtBtns.forEach((b) => {
+      if (!b) return;
+      if (!nextTxt) {
+        b.classList.add("hidden");
+      } else {
+        b.classList.remove("hidden");
+        b.textContent = nextTxt.isUnfinished
+          ? `📝 次の文字版を遊ぶ (#${nextTxt.num})`
+          : `📝 文字版 (#${nextTxt.num}・全問済)`;
+      }
+    });
+
+    const nextSameMode = getNextPlayableProblem(currentMode);
+    if (el.btnNextPill && nextSameMode) {
+      const icon = currentMode === "text" ? "📝" : "🖼️";
+      el.btnNextPill.textContent = `▶️ 次の${currentMode === "text" ? "文字" : "画像"}版 (#${nextSameMode.num}) ${icon}`;
+    }
+  }
+
+  function handleNextProblem(targetMode = null) {
+    const modeToUse = targetMode || state.problem?.mode || null;
+    const nextInfo = getNextPlayableProblem(modeToUse);
+    if (!nextInfo) return;
+    el.resultModal.classList.add("hidden");
+    loadProblem(nextInfo.problem.id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleSwitchModeTab(targetMode) {
+    if (!state.manifest?.problems) return;
+    const currentMode = state.problem?.mode || "image";
+    const isFinished = state.cleared || state.failed;
+
+    // 別モードのタブを押した場合、または現在の問題が終了済みの場合は、そのモードの次の未プレイ問題へ移動
+    if (currentMode !== targetMode || isFinished) {
+      handleNextProblem(targetMode);
+    } else {
+      // 同じモードでプレイ中に押した場合は、同モードの別問題へ切り替え
+      const modeProblems = state.manifest.problems.filter((p) => (p.mode || "image") === targetMode);
+      if (modeProblems.length > 1) {
+        const curIdx = modeProblems.findIndex((p) => p.id === state.currentProblemId);
+        const nextP = modeProblems[(curIdx + 1) % modeProblems.length];
+        loadProblem(nextP.id);
+      }
+    }
+  }
+
   /**
    * 推測結果の1行DOM生成
    */
@@ -371,6 +520,10 @@
     el.btnSubmit.disabled = isFinished;
     el.btnGiveup.classList.toggle("hidden", isFinished);
     el.btnResultModal.classList.toggle("hidden", !isFinished);
+    if (el.btnNextPill) {
+      el.btnNextPill.classList.toggle("hidden", !isFinished);
+    }
+    updateModeTabsAndNextButtons();
 
     if (isFinished) {
       el.guessInput.placeholder = state.cleared
@@ -409,14 +562,14 @@
         el.textSentence2.innerHTML = `<span class="sentence-lock-tag">🔒 3回外すと開放（第2文）</span>`;
       }
 
-      if (missesCount >= 4 || isFinished) {
+      if (missesCount >= 5 || isFinished) {
         el.textSentence3.className = "text-sentence active";
         el.textSentence3.innerHTML = isFinished
           ? escapeHtml(tp.raw_sentences?.[2] || tp.sentence_3)
           : escapeHtml(tp.sentence_3 || "（3文目なし）");
       } else {
         el.textSentence3.className = "text-sentence locked";
-        el.textSentence3.innerHTML = `<span class="sentence-lock-tag">🔒 4回外すと開放（第3文）</span>`;
+        el.textSentence3.innerHTML = `<span class="sentence-lock-tag">🔒 5回外すと開放（第3文・ラストチャンス）</span>`;
       }
     }
 
@@ -527,16 +680,14 @@
       el.hintItem2.classList.add("hidden");
     }
 
-    // ヒント3: 最初の1文字 & 冒頭伏せ字抜粋 (6回目挑戦時 / 5回ミス・ラストチャンス)
+    // ヒント3: 冒頭伏せ字抜粋 (6回目挑戦時 / 5回ミス・ラストチャンス)
     if (missesCount >= 5 || isFinished) {
       el.hintItem3.classList.remove("hidden");
-      const ch = h.first_char || state.problem.target[0];
-      const len = h.char_length || state.problem.target.length;
-      const masked = h.masked_summary || "（データなし）";
-      el.hintItem3Body.innerHTML = `
-        <div style="margin-bottom: 8px;">記事名は「<strong>${escapeHtml(ch)}</strong>」から始まる <strong>${len}文字</strong> の言葉です！</div>
-        ${state.problem.mode !== "text" ? `<blockquote>${escapeHtml(masked)}</blockquote>` : ""}
-      `;
+      const masked =
+        state.problem.mode === "text"
+          ? (state.problem.text_puzzle?.sentence_3 || h.masked_summary || "（上部の第3文が開放されました）")
+          : (h.masked_summary || "（データなし）");
+      el.hintItem3Body.innerHTML = `<blockquote>${escapeHtml(masked)}</blockquote>`;
     } else {
       el.hintItem3.classList.add("hidden");
     }
@@ -830,25 +981,39 @@
   }
 
   /**
-   * プルダウン更新
+   * プルダウン更新（画像版・文字版のグループ別に整理）
    */
   function updateProblemSelectBadges() {
     if (!state.manifest || !Array.isArray(state.manifest.problems)) return;
     const currentVal = el.problemSelect.value || state.currentProblemId;
     el.problemSelect.innerHTML = "";
-    const total = state.manifest.problems.length;
-    state.manifest.problems.forEach((p, idx) => {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      const icon = getSavedStatusIcon(p.id);
-      const modeIcon = p.mode === "text" ? "📝" : "🖼️";
-      const num = total - idx;
-      opt.textContent = `${icon}${modeIcon} #${num} (${p.id})`;
-      el.problemSelect.appendChild(opt);
-    });
+
+    const imgProblems = state.manifest.problems.filter((p) => (p.mode || "image") === "image");
+    const txtProblems = state.manifest.problems.filter((p) => p.mode === "text");
+
+    const appendGroup = (label, list, modeIcon) => {
+      if (list.length === 0) return;
+      const group = document.createElement("optgroup");
+      group.label = label;
+      const total = list.length;
+      list.forEach((p, idx) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        const icon = getSavedStatusIcon(p.id);
+        const num = total - idx;
+        opt.textContent = `${icon}${modeIcon} #${num} (${p.id})`;
+        group.appendChild(opt);
+      });
+      el.problemSelect.appendChild(group);
+    };
+
+    appendGroup("🖼️ 画像版コース", imgProblems, "🖼️画像");
+    appendGroup("📝 文字版コース", txtProblems, "📝文字");
+
     if (currentVal) {
       el.problemSelect.value = currentVal;
     }
+    updateModeTabsAndNextButtons();
   }
 
   /**
@@ -880,6 +1045,13 @@
 
     el.btnGiveup.addEventListener("click", handleGiveUp);
     el.btnResultModal.addEventListener("click", openResultModal);
+    if (el.btnNextPill) el.btnNextPill.addEventListener("click", () => handleNextProblem(null));
+    if (el.tabModeImage) el.tabModeImage.addEventListener("click", () => handleSwitchModeTab("image"));
+    if (el.tabModeText) el.tabModeText.addEventListener("click", () => handleSwitchModeTab("text"));
+    if (el.btnNextImageInline) el.btnNextImageInline.addEventListener("click", () => handleNextProblem("image"));
+    if (el.btnNextTextInline) el.btnNextTextInline.addEventListener("click", () => handleNextProblem("text"));
+    if (el.btnNextImageModal) el.btnNextImageModal.addEventListener("click", () => handleNextProblem("image"));
+    if (el.btnNextTextModal) el.btnNextTextModal.addEventListener("click", () => handleNextProblem("text"));
 
     el.btnToggleSource.addEventListener("click", () => {
       el.creditSourceDrawer.classList.toggle("hidden");

@@ -9,7 +9,7 @@
   <meta property="og:description" content="Wikipediaの画像や文章から記事名を当てる日替わり連想ゲーム。6回以内に答えとの距離0を的中させよう！" />
   <meta property="og:type" content="website" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>" />
-  <link rel="stylesheet" href="./style.css?v=20261111_01" />
+  <link rel="stylesheet" href="./style.css?v=20261112_01" />
 </head>
 <body>
   <!-- トースト通知 -->
@@ -41,6 +41,18 @@
 
     <!-- メインコンテンツ -->
     <main class="main-content">
+      <!-- モード切り替えバー（画像版 / 文字版） -->
+      <nav class="mode-switcher-bar" aria-label="出題モード切り替え">
+        <button id="tab-mode-image" type="button" class="mode-tab-btn active">
+          <span>🖼️ 画像版を遊ぶ</span>
+          <span id="tab-count-image" class="mode-tab-badge">-</span>
+        </button>
+        <button id="tab-mode-text" type="button" class="mode-tab-btn">
+          <span>📝 文字版を遊ぶ</span>
+          <span id="tab-count-text" class="mode-tab-badge">-</span>
+        </button>
+      </nav>
+
       <!-- 出題カード（画像版 or 文字版） -->
       <section class="puzzle-card" aria-label="出題">
         <div class="puzzle-status-bar">
@@ -76,7 +88,7 @@
               <span class="sentence-lock-tag">🔒 3回外すと開放（4回目挑戦時）</span>
             </div>
             <div id="text-sentence-3" class="text-sentence locked">
-              <span class="sentence-lock-tag">🔒 4回外すと開放（5回目挑戦時）</span>
+              <span class="sentence-lock-tag">🔒 5回外すと開放（6回目挑戦時・ラストチャンス）</span>
             </div>
           </div>
         </div>
@@ -91,6 +103,14 @@
             </a>
           </div>
           <p id="revealed-caption-text" class="revealed-caption-text"></p>
+          <div class="revealed-next-row">
+            <button id="btn-next-image-inline" type="button" class="next-problem-btn next-image-btn">
+              🖼️ 次の画像版を遊ぶ
+            </button>
+            <button id="btn-next-text-inline" type="button" class="next-problem-btn next-text-btn">
+              📝 次の文字版を遊ぶ
+            </button>
+          </div>
         </div>
 
         <!-- Wikimedia Commons ライセンス・クレジット（画像版のみ） -->
@@ -143,6 +163,9 @@
             </button>
             <button id="btn-result-modal" type="button" class="action-pill share-pill hidden">
               🏆 結果・シェア
+            </button>
+            <button id="btn-next-pill" type="button" class="action-pill next-pill hidden">
+              ▶️ 次の問題へ
             </button>
           </div>
         </div>
@@ -199,10 +222,10 @@
             <div id="hint-item-2-body" class="hint-item-body"></div>
           </div>
 
-          <!-- ヒント3: 冒頭定義文 & 最初の1文字 (6回目挑戦時 / 5回ミス・ラストチャンス) -->
+          <!-- ヒント3: 冒頭定義文 (6回目挑戦時 / 5回ミス・ラストチャンス) -->
           <div id="hint-item-3" class="hint-timeline-item hidden">
             <div class="hint-item-badge">ヒント 3（6回目挑戦時 / ラストチャンス）</div>
-            <div class="hint-item-title">💡 最初の1文字 ＆ 📝 記事の導入部</div>
+            <div class="hint-item-title">📝 記事の導入部（伏せ字）</div>
             <div id="hint-item-3-body" class="hint-item-body"></div>
           </div>
 
@@ -282,6 +305,15 @@
         </div>
       </div>
 
+      <div class="modal-next-wrap">
+        <button id="btn-next-image-modal" type="button" class="next-problem-btn next-image-btn">
+          🖼️ 次の画像版を遊ぶ
+        </button>
+        <button id="btn-next-text-modal" type="button" class="next-problem-btn next-text-btn">
+          📝 次の文字版を遊ぶ
+        </button>
+      </div>
+
       <div class="share-preview-wrap">
         <label for="share-textarea" class="share-preview-label">シェア用テキスト</label>
         <textarea id="share-textarea" class="share-textarea" rows="6" readonly></textarea>
@@ -311,9 +343,9 @@
           <li><strong>後半3回（4・5・6回目）で核心ヒントが順次開放</strong>:
             <ul style="margin: 4px 0 0 16px; font-size: 0.8rem; color: #cbd5e1;">
               <li>1〜3回目: ノーヒント（自力連想ゾーン）</li>
-              <li>4回目（3回ミス）: 🏷️ 分野カテゴリ ＆ 📑 目次テーマ（文字版は第2文）</li>
-              <li>5回目（4回ミス）: 🔥 答えに非常に近い関連ワード（文字版は第3文）</li>
-              <li>6回目（5回ミス）: 💡 最初の1文字 ＆ 📝 導入部定義文（ラストチャンス）</li>
+              <li>4回目（3回ミス）: 🏷️ 分野カテゴリ ＆ 📑 目次テーマ（文字版は第2文も開放）</li>
+              <li>5回目（4回ミス）: 🔥 答えに非常に近い関連ワード</li>
+              <li>6回目（5回ミス）: 📝 記事の導入部・定義文（文字版は第3文を開放）</li>
             </ul>
           </li>
           <li><strong>6回以内に距離0を的中させよう！</strong>: 辞書にない単語は回数を消費しません。</li>
@@ -338,6 +370,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=20261111_01" defer></script>
+  <script src="./app.js?v=20261112_01" defer></script>
 </body>
 </html>
