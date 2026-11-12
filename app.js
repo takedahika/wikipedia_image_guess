@@ -11,7 +11,7 @@
 (() => {
   "use strict";
 
-  const STORAGE_PREFIX = "wikilens_state_v5_";
+  const STORAGE_PREFIX = "wikilens_state_v6_";
   const MAX_TRIES = 6;
 
   // アプリケーション状態
@@ -21,6 +21,7 @@
     problem: null,
     rankMap: new Map(),      // 正規化単語 -> 順位
     aliasSet: new Set(),     // 別名（1位扱い）
+    motifSet: new Set(),     // 画像に写っているモチーフ語（中間ステップ）
     guesses: [],             // [{ word, rank, attemptNum, isWin, tier, emoji }]
     cleared: false,
     failed: false,
@@ -439,7 +440,7 @@
    * 推測結果の1行DOM生成
    */
   function createGuessRowElement(item, highlight = false) {
-    const total = state.problem?.total_words || 20000;
+    const total = state.problem?.total_words || 100000;
     const { tier, widthPct, label } = getRankVisuals(item.rank, total);
 
     const row = document.createElement("div");
@@ -463,6 +464,36 @@
 
     left.appendChild(numSpan);
     left.appendChild(wordSpan);
+
+    // 画像モチーフ的中バッジ、または前回比（Hot & Cold）バッジを付与
+    if (!item.isWin) {
+      if (state.motifSet.has(item.word)) {
+        const motifTag = document.createElement("span");
+        motifTag.className = "guess-meta-tag motif-tag";
+        motifTag.textContent = "🖼️ モチーフ的中！→象徴する概念は？";
+        left.appendChild(motifTag);
+      } else if (item.attemptNum > 1) {
+        const prevGuesses = state.guesses.filter((g) => g.attemptNum < item.attemptNum);
+        if (prevGuesses.length > 0) {
+          const prevRank = prevGuesses[prevGuesses.length - 1].rank;
+          const bestPrevRank = Math.min(...prevGuesses.map((g) => g.rank));
+          const deltaTag = document.createElement("span");
+          if (item.rank < bestPrevRank) {
+            deltaTag.className = "guess-meta-tag warmer-tag";
+            deltaTag.textContent = "🔥 最短更新！";
+          } else if (item.rank < prevRank) {
+            deltaTag.className = "guess-meta-tag warmer-tag";
+            deltaTag.textContent = "↗ 接近";
+          } else if (item.rank > prevRank) {
+            deltaTag.className = "guess-meta-tag colder-tag";
+            deltaTag.textContent = "↘ 離れた";
+          }
+          if (deltaTag.textContent) {
+            left.appendChild(deltaTag);
+          }
+        }
+      }
+    }
 
     const right = document.createElement("div");
     right.className = "guess-row-right";
@@ -490,6 +521,13 @@
     const missesCount = state.guesses.filter((g) => !g.isWin).length;
 
     // 1. スロット・トラッカーの更新 (Wordle風)
+    if (el.charLenBadge) {
+      const cLen = state.problem.hints?.char_length || state.problem.target?.length || "-";
+      el.charLenBadge.textContent = (missesCount >= 3 || isFinished)
+        ? `🔤 答え: ${cLen}文字`
+        : "🎯 抽象概念を推理";
+    }
+
     el.triesRemainingLabel.textContent = isFinished
       ? (state.cleared ? `🎉 ${state.guesses.length}/6 でクリア！` : "ゲーム終了")
       : `残り ${remainingTries} 回`;
@@ -639,6 +677,8 @@
     // ヒント1: 分野カテゴリ & 目次テーマ (4回目挑戦時 / 3回ミス)
     if (missesCount >= 3 || isFinished) {
       el.hintItem1.classList.remove("hidden");
+      const cLen = h.char_length || state.problem.target?.length || "-";
+      const lenTag = `<span class="hint-tag" style="background: rgba(56, 189, 248, 0.22); color: #bae6fd;">🔤 答えは ${cLen}文字</span>`;
       const cats = Array.isArray(h.category) && h.category.length > 0
         ? h.category.map((c) => `<span class="hint-tag">${escapeHtml(c)}</span>`).join("")
         : `<span class="hint-tag">一般概念</span>`;
@@ -646,7 +686,7 @@
         ? h.sections.slice(0, 4).map((s) => `<span class="hint-tag">§ ${escapeHtml(s)}</span>`).join("")
         : "";
       el.hintItem1Body.innerHTML = `
-        <div class="hint-tag-list" style="margin-bottom: 6px;">${cats}</div>
+        <div class="hint-tag-list" style="margin-bottom: 6px;">${lenTag}${cats}</div>
         ${secs ? `<div class="hint-tag-list">${secs}</div>` : ""}
       `;
     } else {
@@ -789,6 +829,9 @@
     } else {
       saveProgress();
       renderUI();
+      if (state.motifSet.has(newEntry.word)) {
+        showToast(`🖼️ 画像モチーフ「${newEntry.word}」的中！ここから「それが象徴する抽象概念」を連想してみましょう！`, "success");
+      }
     }
   }
 
@@ -898,6 +941,14 @@
       state.problem = data;
       state.rankMap.clear();
       state.aliasSet.clear();
+      state.motifSet.clear();
+
+      if (Array.isArray(data.visual_motifs)) {
+        for (const m of data.visual_motifs) {
+          const nm = normalizeInput(m);
+          if (nm) state.motifSet.add(nm);
+        }
+      }
 
       // 1. words配列から O(1) ハッシュマップ構築
       if (Array.isArray(data.words)) {
@@ -935,10 +986,6 @@
 
       el.problemBadge.textContent = `📅 問題: ${state.currentProblemId}`;
       el.modeBadge.textContent = mode === "text" ? "📝 文字版" : "🖼️ 画像版";
-      if (el.charLenBadge) {
-        const cLen = data.hints?.char_length || data.target?.length || "-";
-        el.charLenBadge.textContent = `🔤 答え: ${cLen}文字`;
-      }
       el.vocabCountBadge.textContent = `辞書: ${(data.total_words || state.rankMap.size).toLocaleString()}語`;
 
       if (mode === "image" && data.image) {

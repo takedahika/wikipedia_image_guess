@@ -9,7 +9,7 @@
   <meta property="og:description" content="Wikipediaの画像や文章から記事名を当てる日替わり連想ゲーム。6回以内に答えとの距離0を的中させよう！" />
   <meta property="og:type" content="website" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔍</text></svg>" />
-  <link rel="stylesheet" href="./style.css?v=20261112_01" />
+  <link rel="stylesheet" href="./style.css?v=20261112_02" />
 </head>
 <body>
   <!-- トースト通知 -->
@@ -58,7 +58,7 @@
         <div class="puzzle-status-bar">
           <span id="problem-badge" class="badge-date">📅 本日の問題</span>
           <span id="mode-badge" class="badge-mode">🖼️ 画像版</span>
-          <span id="char-len-badge" class="badge-mode">🔤 答え: -文字</span>
+          <span id="char-len-badge" class="badge-mode">🎯 抽象概念を推理</span>
           <span id="vocab-count-badge" class="badge-vocab">辞書: 100,000語</span>
         </div>
 
@@ -79,8 +79,8 @@
         <!-- 文字版カード（画像がない抽象概念記事用） -->
         <div id="text-puzzle-card" class="text-puzzle-card hidden">
           <div class="text-puzzle-header">
-            <span class="text-puzzle-label">📖 記事の冒頭文（抜粋）</span>
-            <span class="text-puzzle-sub">正解と別名は伏せられています</span>
+            <span class="text-puzzle-label">📖 概念の周辺ヒント文（段階開放）</span>
+            <span class="text-puzzle-sub">歴史・背景から連想しよう</span>
           </div>
           <div class="text-sentences-container">
             <div id="text-sentence-1" class="text-sentence active"></div>
@@ -370,6 +370,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=20261112_01" defer></script>
+  <script src="./app.js?v=20261112_02" defer></script>
 </body>
 </html>

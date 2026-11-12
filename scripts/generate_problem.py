@@ -733,6 +733,106 @@ CURATED_RELATED_HINTS: dict[str, list[str]] = {
     "時間": ["時計", "空間", "世紀", "秒"],
 }
 
+# 画像版で「画像に写っている具体的なモチーフ（中間ステップ：距離 120〜320 ✨）」として扱う単語
+CURATED_VISUAL_MOTIFS: dict[str, list[str]] = {
+    "運": ["クローバー", "四つ葉", "葉", "植物", "草", "緑", "花"],
+    "感情": ["顔", "表情", "版画", "絵画", "肖像", "人間", "笑う", "泣く", "目", "眉"],
+    "正義": ["女神", "天秤", "剣", "銅像", "彫刻", "神話", "目隠し", "秤", "像"],
+    "思考": ["壁画", "絵画", "女性", "ペン", "書く", "文字", "ローマ", "古代", "本", "紙"],
+    "重力": ["銀河", "星", "天体", "渦", "光", "望遠鏡", "夜空", "リンゴ", "ニュートン"],
+    "時間": ["懐中時計", "時計", "針", "文字盤", "歯車", "砂時計", "カレンダー"],
+}
+
+# 概念的な近傍語（距離 1〜90 🔥 に確実に配置する橋渡し語）
+CURATED_CONCEPT_BRIDGES: dict[str, list[str]] = {
+    "運": ["占い", "運命", "偶然", "努力", "奇跡", "縁起", "お守り", "ジンクス", "くじ", "勝負", "成功", "チャンス", "幸せ", "幸福", "神", "神社"],
+    "情報": ["知識", "通信", "データ", "メディア", "記号", "信号", "伝達", "ニュース", "コンピュータ", "インターネット", "放送", "報道", "秘密", "知恵"],
+    "感情": ["気持ち", "喜び", "悲しみ", "怒り", "恐怖", "驚き", "心理", "心", "気分", "情動", "情緒", "愛情", "涙", "笑顔", "共感", "不安"],
+    "意識": ["認知", "覚醒", "睡眠", "脳", "心", "心理学", "無意識", "自我", "注意", "感覚", "知覚", "麻酔", "夢", "哲学", "主観"],
+    "正義": ["道徳", "倫理", "法律", "法", "権利", "裁判", "裁判所", "公正", "公平", "平等", "善", "悪", "罪", "罰", "秩序", "真実", "良心"],
+    "思考": ["考え", "哲学", "推理", "判断", "論理", "知性", "理性", "発想", "想像", "知恵", "知識", "脳", "頭", "精神", "アイデア", "概念", "仮説"],
+    "孤独": ["一人", "寂しさ", "孤立", "心情", "人間関係", "社会", "群衆", "自由", "自立", "静寂", "沈黙", "疎外", "友人", "家族", "心"],
+    "重力": ["引力", "宇宙", "地球", "質量", "重さ", "落下", "軌道", "惑星", "太陽", "月", "ブラックホール", "相対性理論", "物理", "物理学", "力", "加速度", "無重力"],
+    "記憶": ["学習", "思い出", "脳", "忘却", "認知", "過去", "経験", "記録", "歴史", "懐かしさ", "暗記", "睡眠", "心", "知識", "印象"],
+    "時間": ["時刻", "空間", "秒", "分", "過去", "現在", "未来", "永遠", "瞬間", "歴史", "時代", "時空", "変化", "流れ", "寿命", "歳月", "世紀", "時計"],
+}
+
+# 文字版で1手目から辞書定義（〇〇とは〜）で即バレしないための3段階推理文
+CURATED_TEXT_PUZZLES: dict[str, list[str]] = {
+    "情報": [
+        "日本語の言葉としては明治時代に軍事用語（敵情の報告）の翻訳から定着したが、現代では自然科学から社会科学まであらゆる領域の基礎概念となっている。",
+        "クロード・シャノンはこれを「不確実性を減らすもの」として数理的に定義し、生物の遺伝や神経伝達においても不可欠な指令・信号として機能している。",
+        "文字・数値・記号などの媒体を通じて伝達され、受け手に新たな知識や判断の手がかりをもたらす「知らせ」や「内容」の総称。",
+    ],
+    "意識": [
+        "物質である神経細胞の活動から、なぜ「赤色の感じ」や「痛み」といった主観的な体験が生まれるのかという問いは、科学における最大の難問（ハード・プロブレム）と呼ばれる。",
+        "睡眠や麻酔によって一時的に失われる「目覚めている状態」を指す場合と、自分が今何を感じ・考えているかを自ら把握している働きを指す場合がある。",
+        "外界の刺激や自分自身の内面状態を、主観的に体験し気づいている心の働き・状態を指す言葉。",
+    ],
+    "孤独": [
+        "どれほど大勢の群衆の中に囲まれていたとしても、周囲と内面が通じ合っていないと感じるとき、人はこの状態に置かれる。",
+        "近代以降の都市化や個人主義の広がりとともに社会問題として議論される一方、宗教や哲学・芸術においては自己と向き合う創造的な境地としても捉えられてきた。",
+        "精神的なよりどころとなる人や心の通う相手を欠き、ひとり取り残されたような感覚を伴う状態を指す言葉。",
+    ],
+    "記憶": [
+        "古代ギリシアでは「心の蝋板（ろうばん）に刻印を残すこと」に例えられ、哲学や文学において個人の同一性を支える根幹として扱われてきた。",
+        "反復によって行動が変化する「学習」と表裏一体の関係にあり、保持される時間の長さや内容の性質によって複数の段階に分類される。",
+        "過去の経験を符号化して蓄え、必要なときに再び引き出すという、生物の脳や神経系が持つ基本的な働き。",
+    ],
+}
+
+# ヒント3（ラストチャンス）用の、辞書丸写しではない本質ヒント文
+CURATED_FINAL_HINTS: dict[str, str] = {
+    "運": "【答えは漢字1文字】自分の意思や努力だけではコントロールできない、人生の巡り合わせや勝負の流れ。",
+    "情報": "【答えは漢字2文字】記号や信号を通じて伝えられ、受け手の「不確実性」を減らして判断を導く知らせ。",
+    "感情": "【答えは漢字2文字】外からの出来事や対象に触れたとき、心の中に自然と湧き起こる「喜・怒・哀・楽」などの動き。",
+    "意識": "【答えは漢字2文字】眠りから覚めている状態であり、「いま自分が何を見聞きし、何を感じているか」に気づいている心の働き。",
+    "正義": "【答えは漢字2文字】偏りのない天秤と剣で象徴される、社会や法・道徳において「何が正しいか」を定める理念。",
+    "思考": "【答えは漢字2文字】問いに対して筋道を立て、概念や判断をつなぎ合わせて結論へとたどり着こうとする知的な営み。",
+    "孤独": "【答えは漢字2文字】たとえ雑踏の中にいても、誰とも心が通じ合っていないと感じるときに生まれる静かな隔たりの感覚。",
+    "重力": "【答えは漢字2文字】リンゴが木から落ちる現象から、惑星や銀河が互いを引き止め合う現象までを貫く、質量が生み出す普遍的な働き。",
+    "記憶": "【答えは漢字2文字】過ぎ去った出来事や学んだ知識を脳内に刻み込み、時を超えて再び呼び起こす心の働き。",
+    "時間": "【答えは漢字2文字】過去から現在、未来へと絶えず流れ続け、あらゆる変化や出来事の順序を成り立たせる見えない軸。",
+}
+
+
+def apply_curated_ranking_and_motifs(target: str, ranked_words: list[str], max_words: int = 100000) -> list[str]:
+    """
+    1. 概念的な近傍語（CURATED_CONCEPT_BRIDGES）が確実に上位（距離 1〜90 🔥）に入るように調整
+    2. 画像に写っている具体的なモチーフ（CURATED_VISUAL_MOTIFS）が遠すぎず近すぎない
+       「画像の手がかりゾーン（距離 140〜260 ✨）」に入るように配置
+    """
+    bridges = [w for w in CURATED_CONCEPT_BRIDGES.get(target, []) if w != target]
+    motifs = [w for w in CURATED_VISUAL_MOTIFS.get(target, []) if w != target and w not in bridges]
+    if not bridges and not motifs:
+        return ranked_words[:max_words]
+
+    pos_map = {w: i for i, w in enumerate(ranked_words)}
+
+    # すでに上位80位以内にあるbridgeはそのまま、80位より下にあるbridgeは15〜75位付近に自然挿入
+    late_bridges = [w for w in bridges if pos_map.get(w, 999999) > 80]
+    # モチーフ語で300位より下（遠すぎる）にあるものは 150〜240位（✨かなり近い）に配置
+    late_motifs = [w for w in motifs if pos_map.get(w, 999999) > 300 or pos_map.get(w, 999999) < 80]
+
+    remove_set = set(late_bridges) | set(late_motifs)
+    base_list = [w for w in ranked_words if w not in remove_set]
+
+    # bridgeを上位（index 12 から 3語おき）に挿入
+    insert_pos = 12
+    for bw in late_bridges:
+        idx = min(insert_pos, len(base_list))
+        base_list.insert(idx, bw)
+        insert_pos += 3
+
+    # motifを中間ステップ（index 155 から 7語おき：距離155〜230 ✨）に挿入
+    motif_pos = 155
+    for mw in late_motifs:
+        idx = min(motif_pos, len(base_list))
+        base_list.insert(idx, mw)
+        motif_pos += 7
+
+    return base_list[:max_words]
+
 
 def rerank_existing_problems(
     model: SentenceTransformer,
@@ -791,14 +891,26 @@ def rerank_existing_problems(
             "linked_words": list(dict.fromkeys(curated_hints + linked_words)),
         }
         ranked_words = compute_rankings(model, base_vocab, base_embeddings, info, max_words=max_words)
+        ranked_words = apply_curated_ranking_and_motifs(target, ranked_words, max_words=max_words)
         related_words = curated_hints or extract_related_hint_words(ranked_words, target, aliases, linked_words, count=4)
 
-        if raw_sents:
+        if target in CURATED_TEXT_PUZZLES:
+            cs = CURATED_TEXT_PUZZLES[target]
             d["text_puzzle"] = {
-                "sentence_1": mask_sentence_text(raw_sents[0], target, aliases),
-                "sentence_2": mask_sentence_text(raw_sents[1], target, aliases) if len(raw_sents) > 1 else "",
-                "sentence_3": mask_sentence_text(raw_sents[2], target, aliases) if len(raw_sents) > 2 else "",
-                "sentence_4": mask_sentence_text(raw_sents[3], target, aliases) if len(raw_sents) > 3 else "",
+                "sentence_1": cs[0],
+                "sentence_2": cs[1],
+                "sentence_3": cs[2],
+                "sentence_4": "",
+                "raw_sentences": raw_sents[:4] if raw_sents else cs,
+            }
+        elif raw_sents:
+            # 1文目（辞書定義）を最後に回し、周辺文脈から出す
+            ordered_sents = (raw_sents[1:3] + [raw_sents[0]]) if len(raw_sents) >= 3 else list(reversed(raw_sents))
+            d["text_puzzle"] = {
+                "sentence_1": mask_sentence_text(ordered_sents[0], target, aliases),
+                "sentence_2": mask_sentence_text(ordered_sents[1], target, aliases) if len(ordered_sents) > 1 else "",
+                "sentence_3": mask_sentence_text(ordered_sents[2], target, aliases) if len(ordered_sents) > 2 else "",
+                "sentence_4": "",
                 "raw_sentences": raw_sents[:4],
             }
 
@@ -809,9 +921,10 @@ def rerank_existing_problems(
                 shutil.move(str(old_img), str(new_img))
             d["image"]["url"] = f"./data/images/{new_id}.jpg"
 
-        masked_summary = create_masked_summary(extract, target, aliases)
+        masked_summary = CURATED_FINAL_HINTS.get(target) or create_masked_summary(extract, target, aliases)
         d["id"] = new_id
         d["aliases"] = aliases
+        d["visual_motifs"] = CURATED_VISUAL_MOTIFS.get(target, [])
         d["total_words"] = len(ranked_words)
         d["hints"]["category"] = clean_cats
         d["hints"]["char_length"] = len(target)
