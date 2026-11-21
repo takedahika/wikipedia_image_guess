@@ -1,7 +1,12 @@
 {
-  "latest": "2026-11-12",
-  "updated_at": "2026-11-20T22:04:00Z",
+  "latest": "2026-11-21",
+  "updated_at": "2026-11-21T05:13:58Z",
   "problems": [
+    {
+      "id": "2026-11-21",
+      "mode": "text",
+      "total_words": 100000
+    },
     {
       "id": "2026-11-12",
       "mode": "image",
